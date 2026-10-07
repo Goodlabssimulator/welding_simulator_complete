@@ -1,7 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import StudentDashboard from '../components/Analytics/StudentDashboard';
-import UserMenu from '../components/Common/UserMenu';
 
 export default function StudentPage() {
   const navigate = useNavigate();
@@ -12,9 +11,8 @@ export default function StudentPage() {
         <h2>Student Portal</h2>
         <div className="page-actions">
           <button className="btn btn-primary" onClick={() => navigate('/welding')}>
-            Start Welding
+            🔥 Start Welding
           </button>
-          <UserMenu />
         </div>
       </div>
       <StudentDashboard />

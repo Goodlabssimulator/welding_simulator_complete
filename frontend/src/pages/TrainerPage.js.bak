@@ -1,15 +1,11 @@
 import React from 'react';
 import TrainerDashboard from '../components/Analytics/TrainerDashboard';
-import UserMenu from '../components/Common/UserMenu';
 
 export default function TrainerPage() {
   return (
     <div className="trainer-page">
       <div className="page-header">
         <h2>Trainer Portal</h2>
-        <div className="page-actions">
-          <UserMenu />
-        </div>
       </div>
       <TrainerDashboard />
     </div>

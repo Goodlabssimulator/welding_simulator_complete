@@ -5,6 +5,7 @@ import StudentPage from './pages/StudentPage';
 import TrainerPage from './pages/TrainerPage';
 import WeldingPage from './pages/WeldingPage';
 import ResultsPage from './pages/ResultsPage';
+import StudentProgressPage from './pages/StudentProgressPage';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import Toast from './components/Common/Toast';
 
@@ -97,6 +98,24 @@ function App() {
           />
 
           <Route path="/" element={<RootRedirect />} />
+          <Route
+            path="/student/progress"
+            element={
+              <ProtectedRoute roles={['student']}>
+                <StudentProgressPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/trainer/student/:studentId"
+            element={
+              <ProtectedRoute roles={['trainer', 'admin']}>
+                <StudentProgressPage />
+              </ProtectedRoute>
+            }
+          />
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <Toast toasts={toasts} />

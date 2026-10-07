@@ -129,93 +129,6 @@ router.get('/student/:id/competencies', async (req, res, next) => {
  * GET /api/analytics/trainer/class-summary
  * Trainer: class performance overview
  */
-/**
- * GET /api/analytics/student/:id/progress
- *
- * Full progression for a student: all sessions with scores + competency records over time.
- * Students can only fetch their own; trainers/admins can fetch any.
- */
-router.get('/student/:id/progress', async (req, res, next) => {
-  try {
-    const { id } = req.params;
-
-    // Students can only query themselves
-    if (req.user.role === 'student' && req.user.id !== id) {
-      throw new AppError('Forbidden', 403, 'FORBIDDEN');
-    }
-
-    const [sessionsResult, competenciesResult, summaryResult] = await Promise.all([
-      // Full session history with scores
-      query(
-        `SELECT
-           ws.id,
-           ws.started_at,
-           ws.completed_at,
-           ws.duration_seconds,
-           ws.status,
-           jt.name AS joint_name,
-           et.code AS electrode_code,
-           wp.code AS position_code,
-           a.overall_score,
-           a.grade,
-           a.speed_accuracy_score,
-           a.bead_quality_score,
-           a.fusion_quality_score,
-           a.penetration_score,
-           a.alignment_score,
-           a.consistency_score,
-           a.process_control_score
-         FROM welding_sessions ws
-         LEFT JOIN joint_types jt ON jt.id = ws.joint_type_id
-         LEFT JOIN electrode_types et ON et.id = ws.electrode_id
-         LEFT JOIN welding_positions wp ON wp.id = ws.position_id
-         LEFT JOIN assessments a ON a.session_id = ws.id
-         WHERE ws.user_id = $1 AND ws.status = 'completed'
-         ORDER BY ws.completed_at ASC`,
-        [id]
-      ),
-
-      // Competency history over time
-      query(
-        `SELECT
-           cf.code,
-           cf.name,
-           cf.category,
-           cr.level,
-           cr.score,
-           cr.assessed_at
-         FROM competency_records cr
-         JOIN competency_framework cf ON cf.id = cr.competency_id
-         WHERE cr.user_id = $1
-         ORDER BY cr.assessed_at ASC, cf.code ASC`,
-        [id]
-      ),
-
-      // Quick summary counts
-      query(
-        `SELECT
-           COUNT(*) AS total_sessions,
-           COUNT(CASE WHEN a.overall_score IS NOT NULL THEN 1 END) AS scored_sessions,
-           AVG(a.overall_score) AS avg_score,
-           MAX(a.overall_score) AS best_score,
-           MIN(a.overall_score) AS worst_score
-         FROM welding_sessions ws
-         LEFT JOIN assessments a ON a.session_id = ws.id
-         WHERE ws.user_id = $1 AND ws.status = 'completed'`,
-        [id]
-      ),
-    ]);
-
-    res.json({
-      sessions: sessionsResult.rows,
-      competencies: competenciesResult.rows,
-      summary: summaryResult.rows[0] || {},
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
 router.get('/trainer/class-summary', authorize('trainer', 'admin'), async (req, res, next) => {
   try {
     const cohort = req.query.cohort;
@@ -261,46 +174,9 @@ router.get('/trainer/class-summary', authorize('trainer', 'admin'), async (req, 
       params
     );
     
-    // [trainer-enhanced] Top students from the v_student_progress view
-    const topStudentsResult = await query(
-      `SELECT
-         user_id,
-         first_name || ' ' || last_name AS name,
-         total_sessions,
-         completed_sessions,
-         avg_score,
-         best_score,
-         distinctions,
-         credits
-       FROM v_student_progress
-       WHERE total_sessions > 0
-       ORDER BY avg_score DESC NULLS LAST, best_score DESC NULLS LAST
-       LIMIT 10`,
-      []
-    );
-
-    // [trainer-enhanced] Weekly cohort trend (last 8 weeks)
-    const cohortTrendResult = await query(
-      `SELECT
-         TO_CHAR(DATE_TRUNC('week', ws.completed_at), 'YYYY-MM-DD') AS week,
-         AVG(a.overall_score) AS avg_score,
-         COUNT(*) AS attempts
-       FROM welding_sessions ws
-       JOIN assessments a ON a.session_id = ws.id
-       JOIN users u ON ws.user_id = u.id
-       WHERE ws.status = 'completed'
-         AND ws.completed_at > NOW() - INTERVAL '8 weeks'
-         ${cohortFilter ? cohortFilter.replace('AND u.cohort = $1', 'AND u.cohort = $1') : ''}
-       GROUP BY DATE_TRUNC('week', ws.completed_at)
-       ORDER BY week`,
-      cohort ? [cohort] : []
-    );
-
     res.json({
       classSummary: result.rows[0],
       commonDefects: mistakesResult.rows,
-      topStudents: topStudentsResult.rows,
-      cohortTrend: cohortTrendResult.rows,
     });
   } catch (err) {
     next(err);

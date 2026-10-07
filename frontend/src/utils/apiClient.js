@@ -106,6 +106,8 @@ export const analyticsAPI = {
     apiClient.get(`/analytics/student/${studentId}/trends`, { params }),
   getStudentCompetencies: (studentId) =>
     apiClient.get(`/analytics/student/${studentId}/competencies`),
+  getStudentProgress: (studentId) =>
+    apiClient.get(`/analytics/student/${studentId}/progress`),
 
   // Trainer
   getTrainerClassSummary: (params) =>
