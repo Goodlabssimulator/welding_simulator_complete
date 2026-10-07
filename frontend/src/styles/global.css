@@ -1195,3 +1195,298 @@ tbody tr:hover {
 ::-webkit-scrollbar-thumb:hover {
   background: var(--primary-400);
 }
+
+/* =============================================
+   Welding Workspace Layout
+   ============================================= */
+
+.welding-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  min-height: calc(100vh - 56px);
+}
+
+.welding-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--primary-800);
+  border: 1px solid var(--primary-600);
+  border-radius: var(--radius-md);
+}
+
+.welding-toolbar h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.toolbar-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.joint-select {
+  padding: 6px 12px;
+  background: var(--primary-700);
+  color: #fff;
+  border: 1px solid var(--primary-500);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.joint-select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.loading-hint {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+}
+
+.session-error {
+  color: var(--danger-400);
+  font-size: 0.8rem;
+}
+
+.welding-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: var(--space-md);
+  min-height: 520px;
+}
+
+.welding-main {
+  background: var(--primary-800);
+  border: 1px solid var(--primary-600);
+  border-radius: var(--radius-lg);
+  padding: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.welding-canvas-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 520px;
+}
+
+.welding-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.welding-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  overflow-y: auto;
+  max-height: 720px;
+}
+
+/* TorchController panel */
+.torch-controller {
+  background: var(--primary-800);
+  border: 1px solid var(--primary-600);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+}
+
+.panel-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0 0 var(--space-sm) 0;
+  padding-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--primary-600);
+}
+
+.control-group {
+  margin-bottom: var(--space-sm);
+}
+
+.control-group label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--gray-400);
+  margin-bottom: 4px;
+}
+
+.control-group input[type="range"] {
+  width: 100%;
+}
+
+.slider-value {
+  float: right;
+  font-size: 0.75rem;
+  color: var(--accent-300);
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+
+.torch-buttons {
+  margin-top: var(--space-md);
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.torch-buttons .btn {
+  width: 100%;
+}
+
+/* Weld bead preview */
+.weld-bead-info {
+  background: var(--primary-800);
+  border: 1px solid var(--primary-600);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+}
+
+.bead-preview {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-md) 0;
+  background: rgba(0,0,0,0.2);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.bead-sample {
+  transition: all 0.3s ease;
+}
+
+.bead-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-sm);
+}
+
+.bead-stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+}
+
+.bead-stat .stat-label {
+  color: var(--gray-500);
+}
+
+.bead-stat .stat-value {
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--accent-300);
+}
+
+.quality-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.quality-badge.good { background: rgba(76,175,80,0.2); color: #66bb6a; }
+.quality-badge.fair { background: rgba(255,152,0,0.2); color: #ffa726; }
+.quality-badge.poor { background: rgba(244,67,54,0.2); color: #ef5350; }
+
+/* Parameter panel */
+.parameter-panel {
+  background: var(--primary-800);
+  border: 1px solid var(--primary-600);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+}
+
+.param-readouts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.readout {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+
+.readout-label {
+  color: var(--gray-500);
+}
+
+.readout-value {
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--accent-300);
+}
+
+.param-alerts {
+  margin-top: var(--space-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.param-alert {
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+}
+
+.param-alert.alert-warning {
+  background: rgba(255,152,0,0.15);
+  border-left: 3px solid #ff9800;
+  color: #ffb74d;
+}
+
+.param-alert.alert-danger {
+  background: rgba(244,67,54,0.15);
+  border-left: 3px solid #f44336;
+  color: #ef5350;
+}
+
+/* Status bar */
+.welding-status-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  background: var(--primary-800);
+  border: 1px solid var(--primary-600);
+  border-radius: var(--radius-md);
+  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  color: var(--gray-300);
+}
+
+.status-indicator {
+  font-weight: 700;
+}
+
+.status-indicator.active {
+  color: var(--danger-400);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .welding-layout {
+    grid-template-columns: 1fr;
+  }
+  .welding-sidebar {
+    max-height: none;
+  }
+}

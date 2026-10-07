@@ -2,20 +2,6 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import useTelemetry from '../../hooks/useTelemetry';
 import { generateJointLine, getBeadVisuals, generateSparks, calculateDeviation } from '../../utils/weldingPhysics';
 
-/**
- * Map our current UI parameter names to the names weldingPhysics expects.
- * weldingPhysics was written for: { current, voltage, speed, weldType }
- */
-function toPhysicsParams(p = {}) {
-  return {
-    current: p.current ?? 120,
-    voltage: p.voltage ?? 24,
-    speed: p.weldingSpeed ?? p.speed ?? 4,
-    weldType: p.weldType ?? 'SMAW',
-    wireSpeed: p.wireFeedSpeed ?? p.wireSpeed ?? 6,
-  };
-}
-
 export default function WeldingCanvas({
   isActive,
   parameters,
@@ -140,18 +126,18 @@ export default function WeldingCanvas({
           speed,
           voltage: parameters.voltage,
           current: parameters.current,
-          wireSpeed: parameters.wireFeedSpeed,
+          wireSpeed: parameters.wireSpeed,
         });
       }
 
-      const beadVisuals = getBeadVisuals(toPhysicsParams(parameters), 0);
+      const beadVisuals = getBeadVisuals(parameters, speed);
 
       for (let i = 1; i < beadPathRef.current.length; i++) {
         const prev = beadPathRef.current[i - 1];
         const curr = beadPathRef.current[i];
         const currVisuals = getBeadVisuals(
-          { current: curr.current, voltage: curr.voltage, speed: curr.speed, weldType: parameters.weldType },
-          0
+          { voltage: curr.voltage, current: curr.current, wireSpeed: curr.wireSpeed },
+          curr.speed
         );
 
         // Bead body

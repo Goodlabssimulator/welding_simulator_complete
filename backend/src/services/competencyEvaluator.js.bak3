@@ -8,12 +8,6 @@
  *   - Not Yet Competent
  */
 
-function clamp01to100(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(100, n));
-}
-
 class CompetencyEvaluator {
   constructor() {
     // Mapping of competency codes to the sub-scores they primarily depend on
@@ -186,17 +180,16 @@ class CompetencyEvaluator {
     for (const row of frameworkRows) {
       const keys = codeToKeys[row.code];
       if (!keys) continue;
-      const scores = keys.map(scoreOf).map(clamp01to100);
-      const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-      const safeAvg = clamp01to100(avg);
-      const level = this._assignLevel(safeAvg);
+      const scores = keys.map(scoreOf);
+      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+      const level = this._assignLevel(avg);
 
       results.push({
         frameworkId: row.id,
         code: row.code,
         name: row.name,
         level,
-        score: Math.round(safeAvg * 10) / 10,
+        score: Math.round(avg * 10) / 10,
         evidence: { keys, scores },
       });
     }

@@ -1,45 +1,107 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { weldingAPI } from '../utils/apiClient';
-import { WS_BASE, TELEMETRY_SAMPLE_RATE } from '../utils/constants';
+import { WS_BASE } from '../utils/constants';
+
+const DEFAULT_PARAMETERS = {
+  weldType: 'SMAW',
+  jointTypeCode: 'butt',
+  positionCode: '1G',
+  electrodeCode: 'E6013',
+  material: 'mild_steel',
+  current: 120,
+  voltage: 24,
+  weldingSpeed: 4,
+  workpieceGap: 2,
+  workpieceThickness: 6,
+  electrodeAngle: 15,
+  workAngle: 0,
+  wireFeedSpeed: 6,
+  gasFlow: 18,
+};
 
 /**
- * Custom hook for managing a welding session lifecycle
- * Handles: session start/stop, WebSocket telemetry, parameter tracking
+ * Custom hook for managing a welding session lifecycle.
+ *
+ * - Fetches /welding/config on mount so we can map human codes → DB IDs.
+ * - startSession({ jointTypeCode, electrodeCode, positionCode, ... }) creates
+ *   a session via POST /welding/session/start.
+ * - completeSession() submits buffered telemetry (if any) then
+ *   POST /welding/session/:id/complete and returns the assessment payload.
  */
 export default function useWeldingSession() {
   const [sessionId, setSessionId] = useState(null);
   const [isActive, setIsActive] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
-  const [parameters, setParameters] = useState({
-    weldType: 'SMAW',
-    jointType: 'butt',
-    position: '1G',
-    material: 'mild_steel',
-    current: 120,
-    voltage: 24,
-    speed: 4,
-    electrodeAngle: 15,
-    workAngle: 0,
-    wireFeedSpeed: 6,
-    gasFlow: 18,
-  });
+  const [parameters, setParameters] = useState({ ...DEFAULT_PARAMETERS });
   const [telemetry, setTelemetry] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [duration, setDuration] = useState(0);
   const [error, setError] = useState(null);
+  const [config, setConfig] = useState(null);   // { jointTypes, electrodes, positions }
 
   const wsRef = useRef(null);
   const telemetryBufferRef = useRef([]);
   const startTimeRef = useRef(null);
   const timerRef = useRef(null);
-  const telemetryIntervalRef = useRef(null);
 
-  // Connect WebSocket
+  // ------------------------------------------------------------
+  // Load config (joints, electrodes, positions) on mount
+  // ------------------------------------------------------------
+  useEffect(() => {
+    let cancelled = false;
+    async function loadConfig() {
+      try {
+        const res = await weldingAPI.getConfig();
+        if (!cancelled) setConfig(res.data);
+      } catch (err) {
+        console.warn('Could not load welding config:', err.message);
+      }
+    }
+    loadConfig();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ------------------------------------------------------------
+  // Lookup helpers
+  // ------------------------------------------------------------
+  const resolveIds = useCallback((params) => {
+    if (!config) {
+      throw new Error('Welding config not loaded yet');
+    }
+
+    // Match joint type by name (case-insensitive partial)
+    const jointKey = (params.jointTypeCode || 'butt').toLowerCase();
+    const joint = config.jointTypes.find((j) =>
+      j.name.toLowerCase().includes(jointKey === 'tee' ? 't-' : jointKey)
+    );
+    if (!joint) throw new Error(`Unknown joint type: ${params.jointTypeCode}`);
+
+    // Match electrode by code
+    const electrode = config.electrodes.find((e) =>
+      e.code === (params.electrodeCode || 'E6013')
+    );
+    if (!electrode) throw new Error(`Unknown electrode: ${params.electrodeCode}`);
+
+    // Match position by code
+    const position = config.positions.find((p) =>
+      p.code === (params.positionCode || '1G')
+    );
+    if (!position) throw new Error(`Unknown position: ${params.positionCode}`);
+
+    return {
+      jointTypeId: joint.id,
+      electrodeId: electrode.id,
+      positionId: position.id,
+    };
+  }, [config]);
+
+  // ------------------------------------------------------------
+  // WebSocket connection
+  // ------------------------------------------------------------
   const connectWebSocket = useCallback((userId) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
     const ws = new WebSocket(WS_BASE);
-    
+
     ws.onopen = () => {
       ws.send(JSON.stringify({ type: 'auth', userId }));
     };
@@ -47,155 +109,142 @@ export default function useWeldingSession() {
     ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
-        
-        switch (message.type) {
-          case 'welding:alert':
-            setAlerts(prev => [message, ...prev].slice(0, 10));
-            break;
-          case 'welding:feedback':
-            // Real-time feedback handled by the welding page
-            break;
-          case 'auth_confirmed':
-            console.log('WebSocket authenticated');
-            break;
+        if (message.type === 'welding:alert') {
+          setAlerts((prev) => [message, ...prev].slice(0, 10));
         }
       } catch (err) {
         console.error('WebSocket message error:', err);
       }
     };
 
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-      wsRef.current = null;
-    };
-
-    ws.onerror = (err) => {
-      console.error('WebSocket error:', err);
-    };
+    ws.onclose = () => { wsRef.current = null; };
+    ws.onerror = (err) => { console.error('WebSocket error:', err); };
 
     wsRef.current = ws;
   }, []);
 
+  // ------------------------------------------------------------
   // Start session
-  const startSession = useCallback(async (userId) => {
+  // ------------------------------------------------------------
+  const startSession = useCallback(async (userId, overrideParams = {}) => {
     try {
       setError(null);
-      const res = await weldingAPI.startSession({
-        weldType: parameters.weldType,
-        jointType: parameters.jointType,
-        position: parameters.position,
-        material: parameters.material,
-        parameters: {
-          current: parameters.current,
-          voltage: parameters.voltage,
-          speed: parameters.speed,
-          electrodeAngle: parameters.electrodeAngle,
-          workAngle: parameters.workAngle,
-          wireFeedSpeed: parameters.wireFeedSpeed,
-          gasFlow: parameters.gasFlow,
-        },
-      });
 
+      const merged = { ...parameters, ...overrideParams };
+      const ids = resolveIds(merged);
+
+      const payload = {
+        ...ids,
+        weldingSpeed: merged.weldingSpeed,
+        weldingCurrent: merged.current,
+        voltage: merged.voltage,
+        workpieceGap: merged.workpieceGap,
+        workpieceThickness: merged.workpieceThickness,
+      };
+
+      const res = await weldingAPI.startSession(payload);
       const newSessionId = res.data.session.id;
+
       setSessionId(newSessionId);
       setIsActive(true);
       setTelemetry([]);
       setAlerts([]);
       setDuration(0);
       startTimeRef.current = Date.now();
+      telemetryBufferRef.current = [];
 
-      // Connect WebSocket
-      connectWebSocket(userId);
+      if (userId) connectWebSocket(userId);
 
-      // Start timer
       timerRef.current = setInterval(() => {
         setDuration(Math.floor((Date.now() - startTimeRef.current) / 1000));
       }, 1000);
-
-      // Start telemetry buffering
-      telemetryBufferRef.current = [];
 
       return newSessionId;
     } catch (err) {
       setError(err.message || 'Failed to start session');
       throw err;
     }
-  }, [parameters, connectWebSocket]);
+  }, [parameters, resolveIds, connectWebSocket]);
 
-  // Add telemetry reading
+  // ------------------------------------------------------------
+  // Telemetry
+  // ------------------------------------------------------------
   const addTelemetry = useCallback((reading) => {
     if (!isActive) return;
 
-    const enrichedReading = {
-      ...reading,
-      timestamp_ms: Date.now() - startTimeRef.current,
-      parameters: { ...parameters },
+    const elapsedMs = startTimeRef.current
+      ? Date.now() - startTimeRef.current
+      : 0;
+
+    // Map to the shape the backend `PUT /telemetry` route expects
+    const normalized = {
+      timestamp_ms: reading.timestamp_ms ?? elapsedMs,
+      torch_x: reading.x ?? reading.torch_x ?? 0,
+      torch_y: reading.y ?? reading.torch_y ?? 0,
+      speed: reading.speed ?? 0,
+      path_deviation: reading.deviation ?? reading.path_deviation ?? 0,
+      current_reading: reading.current ?? parameters.current,
+      heat_input: ((parameters.current * parameters.voltage) / 1000).toFixed(2),
+      arc_length: reading.arc_length ?? 2,
+      completion_pct: reading.completion_pct ?? 0,
     };
 
-    telemetryBufferRef.current.push(enrichedReading);
-    setTelemetry(prev => [...prev, enrichedReading]);
+    telemetryBufferRef.current.push(normalized);
+    setTelemetry((prev) => [...prev, normalized]);
 
-    // Send via WebSocket for real-time analysis
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'welding:telemetry',
-        data: {
-          sessionId,
-          readings: [enrichedReading],
-        },
+        data: { sessionId, readings: [normalized] },
       }));
     }
   }, [isActive, sessionId, parameters]);
 
-  // Pause/resume
-  const togglePause = useCallback(() => {
-    setIsPaused(prev => !prev);
-  }, []);
-
+  // ------------------------------------------------------------
   // Complete session
+  // ------------------------------------------------------------
   const completeSession = useCallback(async () => {
     try {
       if (timerRef.current) clearInterval(timerRef.current);
       setIsActive(false);
-      setIsPaused(false);
 
-      // Send final telemetry batch via HTTP
+      const durationSeconds = startTimeRef.current
+        ? Math.floor((Date.now() - startTimeRef.current) / 1000)
+        : 0;
+
+      // Send any buffered telemetry first
       if (telemetryBufferRef.current.length > 0 && sessionId) {
         await weldingAPI.submitTelemetry(sessionId, {
           readings: telemetryBufferRef.current,
         });
       }
 
-      // Complete the session
-      if (sessionId) {
-        const res = await weldingAPI.completeSession(sessionId);
-        
-        // Notify WebSocket
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({
-            type: 'welding:stop',
-            sessionId,
-          }));
-        }
+      if (!sessionId) throw new Error('No active session');
 
-        return res.data;
+      const res = await weldingAPI.completeSession(sessionId, { durationSeconds });
+
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'welding:stop', sessionId }));
       }
+
+      // Return both the assessment payload AND the session id
+      return { sessionId, ...res.data };
     } catch (err) {
       setError(err.message || 'Failed to complete session');
       throw err;
     }
   }, [sessionId]);
 
-  // Update a single parameter
+  // ------------------------------------------------------------
+  // Misc helpers
+  // ------------------------------------------------------------
   const updateParameter = useCallback((key, value) => {
-    setParameters(prev => ({ ...prev, [key]: value }));
+    setParameters((prev) => ({ ...prev, [key]: value }));
   }, []);
 
-  // Reset session
   const resetSession = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     setIsActive(false);
-    setIsPaused(false);
     setSessionId(null);
     setTelemetry([]);
     setAlerts([]);
@@ -208,7 +257,6 @@ export default function useWeldingSession() {
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
-      if (telemetryIntervalRef.current) clearInterval(telemetryIntervalRef.current);
       if (wsRef.current) {
         wsRef.current.close();
         wsRef.current = null;
@@ -217,20 +265,26 @@ export default function useWeldingSession() {
   }, []);
 
   return {
+    // State
     sessionId,
     isActive,
-    isPaused,
     parameters,
     telemetry,
     alerts,
     duration,
     error,
+    config,
+
+    // Actions
     startSession,
     completeSession,
-    togglePause,
     addTelemetry,
     updateParameter,
     resetSession,
     setParameters,
+
+    // Aliases for convenience
+    sendTelemetry: addTelemetry,
+    stopSession: completeSession,
   };
 }

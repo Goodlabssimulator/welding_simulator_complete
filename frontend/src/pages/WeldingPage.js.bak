@@ -1,53 +1,41 @@
 import React, { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useWeldingSession from '../hooks/useWeldingSession';
-import { useAuth } from '../hooks/useAuth';
 import WeldingCanvas from '../components/Workspace/WeldingCanvas';
 import TorchController from '../components/Workspace/TorchController';
 import WeldBead from '../components/Workspace/WeldBead';
 import ParameterPanel from '../components/Workspace/ParameterPanel';
+import { DEFAULT_PARAMS } from '../utils/constants';
 
 export default function WeldingPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-
+  const [parameters, setParameters] = useState({ ...DEFAULT_PARAMS });
   const [jointType, setJointType] = useState('butt');
-  const [torchInfo, setTorchInfo] = useState({
-    x: 0, y: 0, speed: 0, deviation: 0, isTracking: false,
-  });
+  const [torchInfo, setTorchInfo] = useState({ x: 0, y: 0, speed: 0, deviation: 0, isTracking: false });
 
   const {
     sessionId,
     isActive,
-    parameters,
-    config,
+    loading,
     error: sessionError,
     startSession,
-    completeSession,
+    stopSession,
     sendTelemetry,
-    updateParameter,
-    setParameters,
   } = useWeldingSession();
 
   const handleStart = useCallback(async () => {
-    if (!user) return;
-    try {
-      await startSession(user.id, { jointTypeCode: jointType });
-    } catch (err) {
-      console.error('start failed:', err);
+    const id = await startSession(jointType, parameters);
+    if (id) {
+      // Session started successfully
     }
-  }, [user, jointType, startSession]);
+  }, [jointType, parameters, startSession]);
 
   const handleStop = useCallback(async () => {
-    try {
-      const results = await completeSession();
-      if (results?.sessionId) {
-        navigate(`/results/${results.sessionId}`);
-      }
-    } catch (err) {
-      console.error('stop failed:', err);
+    const results = await stopSession();
+    if (results) {
+      navigate(`/results/${results.sessionId || sessionId}`);
     }
-  }, [completeSession, navigate]);
+  }, [stopSession, navigate, sessionId]);
 
   const handleTelemetry = useCallback((data) => {
     sendTelemetry(data);
@@ -64,16 +52,14 @@ export default function WeldingPage() {
         <div className="toolbar-controls">
           <select
             value={jointType}
-            onChange={(e) => setJointType(e.target.value)}
+            onChange={e => setJointType(e.target.value)}
             className="joint-select"
-            disabled={isActive}
           >
             <option value="butt">Butt Joint</option>
             <option value="lap">Lap Joint</option>
             <option value="tee">Tee Joint</option>
             <option value="corner">Corner Joint</option>
           </select>
-          {!config && <span className="loading-hint">Loading config…</span>}
           {sessionError && <span className="session-error">{sessionError}</span>}
         </div>
       </div>
@@ -109,7 +95,7 @@ export default function WeldingPage() {
       {isActive && (
         <div className="welding-status-bar">
           <span className="status-indicator active">● LIVE</span>
-          <span>Session: {sessionId?.slice(0, 8)}…</span>
+          <span>Session: {sessionId}</span>
           <span>Speed: {torchInfo.speed.toFixed(0)} px/s</span>
           <span>Deviation: {torchInfo.deviation.toFixed(1)} px</span>
           <span>V: {parameters.voltage.toFixed(0)}V</span>

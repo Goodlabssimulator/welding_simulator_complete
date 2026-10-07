@@ -76,37 +76,30 @@ class AssessmentService {
     const arrays = { speed: [], voltage: [], current: [], wireSpeed: [], travelAngle: [], workAngle: [], contactTipDistance: [] };
 
     for (const t of telemetry) {
-      if (Number.isFinite(Number(t.speed))) arrays.speed.push(Number(t.speed)); // [finite-guard]
-      if (Number.isFinite(Number(t.voltage))) arrays.voltage.push(Number(t.voltage));
-      if (Number.isFinite(Number(t.current))) arrays.current.push(Number(t.current));
-      if (Number.isFinite(Number(t.wire_speed))) arrays.wireSpeed.push(Number(t.wire_speed));
-      if (Number.isFinite(Number(t.travel_angle))) arrays.travelAngle.push(Number(t.travel_angle));
-      if (Number.isFinite(Number(t.work_angle))) arrays.workAngle.push(Number(t.work_angle));
-      if (Number.isFinite(Number(t.contact_tip_distance))) arrays.contactTipDistance.push(Number(t.contact_tip_distance));
+      if (t.speed != null) arrays.speed.push(t.speed);
+      if (t.voltage != null) arrays.voltage.push(t.voltage);
+      if (t.current != null) arrays.current.push(t.current);
+      if (t.wire_speed != null) arrays.wireSpeed.push(t.wire_speed);
+      if (t.travel_angle != null) arrays.travelAngle.push(t.travel_angle);
+      if (t.work_angle != null) arrays.workAngle.push(t.work_angle);
+      if (t.contact_tip_distance != null) arrays.contactTipDistance.push(t.contact_tip_distance);
     }
 
     return arrays;
   }
 
   _mean(arr) {
-    if (!arr || arr.length === 0) return 0;
-    const sum = arr.reduce((a, b) => a + b, 0);
-    const m = sum / arr.length;
-    return Number.isFinite(m) ? m : 0;
+    return arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
   }
 
   _stdDev(arr) {
-    if (!arr || arr.length < 2) return 0;
+    if (arr.length < 2) return 0;
     const m = this._mean(arr);
-    if (!Number.isFinite(m)) return 0;
-    const variance = arr.reduce((s, v) => s + (Number(v) - m) ** 2, 0) / arr.length;
-    return Number.isFinite(variance) ? Math.sqrt(variance) : 0;
+    return Math.sqrt(arr.reduce((s, v) => s + (v - m) ** 2, 0) / arr.length);
   }
 
   _clamp(val, min = 0, max = 100) {
-    const n = Number(val);
-    if (!Number.isFinite(n)) return min;
-    return Math.max(min, Math.min(max, n));
+    return Math.max(min, Math.min(max, val));
   }
 
   /**
@@ -258,16 +251,12 @@ class AssessmentService {
    * Consistency – overall variation across all parameters.
    */
   _scoreConsistency(params) {
-    // [soft-consistency-2] Gentler curve for simulation.
-    // Real mouse movement is naturally jittery; the original formula
-    // (100 - avgCV * 200) punished even reasonable variation.
-    // New curve: CV 0.1 → 90, CV 0.3 → 75, CV 0.5 → 60, CV 1.0 → 30, CV 2.0 → 0
     const devs = [];
     for (const key of Object.keys(params)) {
       if (params[key].length > 1) {
         const mean = this._mean(params[key]);
         if (mean > 0) {
-          devs.push(this._stdDev(params[key]) / mean);
+          devs.push(this._stdDev(params[key]) / mean); // coefficient of variation
         }
       }
     }
@@ -275,8 +264,9 @@ class AssessmentService {
     if (devs.length === 0) return 50;
 
     const avgCV = this._mean(devs);
-    // 100 at CV=0, 0 at CV=2, linear
-    const score = 100 - avgCV * 50;
+    // Lower CV → more consistent → higher score
+    // CV of 0.05 (5% variation) ≈ 95, CV of 0.5 ≈ 20
+    const score = 100 - avgCV * 200;
     return this._clamp(score);
   }
 

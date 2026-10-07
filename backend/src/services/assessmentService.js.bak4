@@ -258,16 +258,12 @@ class AssessmentService {
    * Consistency – overall variation across all parameters.
    */
   _scoreConsistency(params) {
-    // [soft-consistency-2] Gentler curve for simulation.
-    // Real mouse movement is naturally jittery; the original formula
-    // (100 - avgCV * 200) punished even reasonable variation.
-    // New curve: CV 0.1 → 90, CV 0.3 → 75, CV 0.5 → 60, CV 1.0 → 30, CV 2.0 → 0
     const devs = [];
     for (const key of Object.keys(params)) {
       if (params[key].length > 1) {
         const mean = this._mean(params[key]);
         if (mean > 0) {
-          devs.push(this._stdDev(params[key]) / mean);
+          devs.push(this._stdDev(params[key]) / mean); // coefficient of variation
         }
       }
     }
@@ -275,8 +271,9 @@ class AssessmentService {
     if (devs.length === 0) return 50;
 
     const avgCV = this._mean(devs);
-    // 100 at CV=0, 0 at CV=2, linear
-    const score = 100 - avgCV * 50;
+    // Lower CV → more consistent → higher score
+    // CV of 0.05 (5% variation) ≈ 95, CV of 0.5 ≈ 20
+    const score = 100 - avgCV * 200;
     return this._clamp(score);
   }
 

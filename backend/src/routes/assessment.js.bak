@@ -18,25 +18,8 @@ router.get('/:sessionId', async (req, res, next) => {
   try {
     const { sessionId } = req.params;
     
-    // [joined-session] Return the assessment + session/joint/position context
     const result = await query(
-      `SELECT
-         a.*,
-         ws.duration_seconds,
-         ws.started_at,
-         ws.completed_at,
-         ws.completion_pct,
-         jt.name AS joint_name,
-         et.code AS electrode_code,
-         et.name AS electrode_name,
-         wp.code AS position_code,
-         wp.name AS position_name
-       FROM assessments a
-       LEFT JOIN welding_sessions ws ON ws.id = a.session_id
-       LEFT JOIN joint_types jt ON jt.id = ws.joint_type_id
-       LEFT JOIN electrode_types et ON et.id = ws.electrode_id
-       LEFT JOIN welding_positions wp ON wp.id = ws.position_id
-       WHERE a.session_id = $1`,
+      'SELECT * FROM assessments WHERE session_id = $1',
       [sessionId]
     );
     

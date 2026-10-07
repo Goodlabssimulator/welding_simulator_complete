@@ -9,16 +9,10 @@ function getGrade(score) {
   return { ...GRADES.FAIL, key: 'Fail' };
 }
 
-function safeNum(v, fallback = 0) {
-  // [safe-num] Number() handles strings from Postgres DECIMAL columns
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
-}
-
 export default function ScoreCard({ results }) {
   if (!results) return null;
 
-  const overall = safeNum(results.overallScore ?? results.score);
+  const overall = results.overallScore ?? results.score ?? 0;
   const grade = getGrade(overall);
 
   return (

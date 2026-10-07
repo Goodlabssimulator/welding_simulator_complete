@@ -1,60 +1,50 @@
 import React from 'react';
-import Gauge from '../Common/Gauge';
-import { getParameterAlerts } from '../../utils/weldingPhysics';
 
-export default function ParameterPanel({ parameters, speed, deviation }) {
-  const alerts = getParameterAlerts(parameters, speed);
+export default function ParameterPanel({ parameters, speed = 0, deviation = 0 }) {
+  const fmt = (v, d = 0) => (typeof v === 'number' ? v.toFixed(d) : '—');
+
+  const alerts = [];
+  if (typeof speed === 'number' && speed > 8) {
+    alerts.push({ severity: 'warning', message: 'Travel speed high — risk of lack of penetration' });
+  }
+  if (typeof parameters.current === 'number' && parameters.current > 200) {
+    alerts.push({ severity: 'danger', message: 'Current too high — risk of burn-through' });
+  }
+  if (typeof parameters.current === 'number' && parameters.current < 60) {
+    alerts.push({ severity: 'warning', message: 'Current too low — risk of lack of fusion' });
+  }
+  if (typeof parameters.voltage === 'number' && parameters.voltage > 30) {
+    alerts.push({ severity: 'danger', message: 'Voltage too high — unstable arc' });
+  }
 
   return (
     <div className="parameter-panel">
-      <h3 className="panel-title">📊 Parameters</h3>
-
-      <div className="gauge-row">
-        <Gauge
-          value={parameters.voltage}
-          min={15}
-          max={35}
-          label="Voltage"
-          unit="V"
-          size={100}
-          colorClass="voltage"
-        />
-        <Gauge
-          value={parameters.current}
-          min={80}
-          max={250}
-          label="Current"
-          unit="A"
-          size={100}
-          colorClass="current"
-        />
-        <Gauge
-          value={speed}
-          min={0}
-          max={300}
-          label="Speed"
-          unit="px/s"
-          size={100}
-          colorClass="speed"
-        />
-      </div>
+      <h3 className="panel-title">Live Parameters</h3>
 
       <div className="param-readouts">
         <div className="readout">
-          <span className="readout-label">Wire Speed</span>
-          <span className="readout-value">{parameters.wireSpeed.toFixed(1)} m/min</span>
+          <span className="readout-label">Voltage</span>
+          <span className="readout-value">{fmt(parameters.voltage, 1)} V</span>
         </div>
         <div className="readout">
-          <span className="readout-label">Torch Angle</span>
-          <span className="readout-value">{parameters.torchAngle.toFixed(0)}°</span>
+          <span className="readout-label">Current</span>
+          <span className="readout-value">{fmt(parameters.current, 0)} A</span>
         </div>
         <div className="readout">
-          <span className="readout-label">Travel Angle</span>
-          <span className="readout-value">{parameters.travelAngle.toFixed(0)}°</span>
+          <span className="readout-label">Travel Speed</span>
+          <span className="readout-value">{fmt(parameters.weldingSpeed, 1)} mm/s</span>
+        </div>
+        <div className="readout">
+          <span className="readout-label">Torch Speed</span>
+          <span className="readout-value">{fmt(speed, 0)} px/s</span>
         </div>
         <div className="readout">
           <span className="readout-label">Deviation</span>
-          <span className="readout-value">{deviation.toFixed(1)} px</span>
+          <span className="readout-value">{fmt(deviation, 1)} px</span>
+        </div>
+        <div className="readout">
+          <span className="readout-label">Thickness</span>
+          <span className="readout-value">{fmt(parameters.workpieceThickness, 1)} mm</span>
         </div>
       </div>
 
@@ -62,9 +52,6 @@ export default function ParameterPanel({ parameters, speed, deviation }) {
         <div className="param-alerts">
           {alerts.map((alert, i) => (
             <div key={i} className={`param-alert alert-${alert.severity}`}>
-              <span className="alert-icon">
-                {alert.severity === 'danger' ? '🔴' : alert.severity === 'warning' ? '🟡' : '🔵'}
-              </span>
               <span className="alert-text">{alert.message}</span>
             </div>
           ))}

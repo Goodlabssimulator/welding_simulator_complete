@@ -73,12 +73,9 @@ export default function useTelemetry(canvasRef, jointLine) {
       const pixelDist = Math.sqrt(dx * dx + dy * dy);
       const dt = (now - prevTimeRef.current) / 1000; // seconds
       
-      // [speed-scale-2] Two speed values:
-      // - mmDist: physical distance for total-distance tracking
-      // - speedMmS: normalized to realistic welding speed (1-10 mm/s)
+      // Convert pixels to mm (approx 3px = 1mm)
       const mmDist = pixelDist / 3;
-      const pxPerSec = dt > 0 ? pixelDist / dt : 0;
-      const speedMmS = Math.max(0.5, Math.min(10, pxPerSec / 60));
+      const speedMmS = dt > 0 ? mmDist / dt : 0;
 
       setCurrentSpeed(Math.round(speedMmS * 10) / 10);
       speedHistoryRef.current.push(speedMmS);

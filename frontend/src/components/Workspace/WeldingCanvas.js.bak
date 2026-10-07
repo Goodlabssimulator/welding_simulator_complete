@@ -2,20 +2,6 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import useTelemetry from '../../hooks/useTelemetry';
 import { generateJointLine, getBeadVisuals, generateSparks, calculateDeviation } from '../../utils/weldingPhysics';
 
-/**
- * Map our current UI parameter names to the names weldingPhysics expects.
- * weldingPhysics was written for: { current, voltage, speed, weldType }
- */
-function toPhysicsParams(p = {}) {
-  return {
-    current: p.current ?? 120,
-    voltage: p.voltage ?? 24,
-    speed: p.weldingSpeed ?? p.speed ?? 4,
-    weldType: p.weldType ?? 'SMAW',
-    wireSpeed: p.wireFeedSpeed ?? p.wireSpeed ?? 6,
-  };
-}
-
 export default function WeldingCanvas({
   isActive,
   parameters,
@@ -31,17 +17,12 @@ export default function WeldingCanvas({
   const [canvasSize, setCanvasSize] = useState({ width: 900, height: 500 });
 
   const {
-    torchPosition: position,
-    currentSpeed: speed,
-    pathDeviation: deviation,
+    position,
+    speed,
+    deviation,
     isTracking,
     handlers,
-  } = useTelemetry(canvasRef, jointLineRef.current);
-
-  // [safe-defaults] Prevent crashes if position is briefly undefined
-  const safePosition = position || { x: 0, y: 0 };
-  const safeSpeed = typeof speed === 'number' ? speed : 0;
-  const safeDeviation = typeof deviation === 'number' ? deviation : 0;
+  } = useTelemetry(canvasRef, { jointLine: jointLineRef.current });
 
   // Initialize joint line
   useEffect(() => {
@@ -57,13 +38,13 @@ export default function WeldingCanvas({
   // Notify parent of position/speed changes
   useEffect(() => {
     if (onPositionChange) {
-      onPositionChange({ x: safePosition.x, y: safePosition.y, speed, deviation, isTracking });
+      onPositionChange({ x: position.x, y: position.y, speed, deviation, isTracking });
     }
     if (onTelemetry && isTracking) {
       const dev = calculateDeviation(position, jointLineRef.current);
       onTelemetry({
-        x: safePosition.x,
-        y: safePosition.y,
+        x: position.x,
+        y: position.y,
         speed,
         deviation: dev,
         timestamp: Date.now(),
@@ -133,25 +114,25 @@ export default function WeldingCanvas({
     if (isActive && isTracking && beadPathRef.current) {
       const lastPoint = beadPathRef.current[beadPathRef.current.length - 1];
       if (!lastPoint ||
-          Math.hypot(safePosition.x - lastPoint.x, safePosition.y - lastPoint.y) > 2) {
+          Math.hypot(position.x - lastPoint.x, position.y - lastPoint.y) > 2) {
         beadPathRef.current.push({
-          x: safePosition.x,
-          y: safePosition.y,
+          x: position.x,
+          y: position.y,
           speed,
           voltage: parameters.voltage,
           current: parameters.current,
-          wireSpeed: parameters.wireFeedSpeed,
+          wireSpeed: parameters.wireSpeed,
         });
       }
 
-      const beadVisuals = getBeadVisuals(toPhysicsParams(parameters), 0);
+      const beadVisuals = getBeadVisuals(parameters, speed);
 
       for (let i = 1; i < beadPathRef.current.length; i++) {
         const prev = beadPathRef.current[i - 1];
         const curr = beadPathRef.current[i];
         const currVisuals = getBeadVisuals(
-          { current: curr.current, voltage: curr.voltage, speed: curr.speed, weldType: parameters.weldType },
-          0
+          { voltage: curr.voltage, current: curr.current, wireSpeed: curr.wireSpeed },
+          curr.speed
         );
 
         // Bead body
@@ -205,8 +186,8 @@ export default function WeldingCanvas({
     if (isTracking) {
       // Torch glow
       const gradient = ctx.createRadialGradient(
-        safePosition.x, safePosition.y, 0,
-        safePosition.x, safePosition.y, isActive ? 35 : 15
+        position.x, position.y, 0,
+        position.x, position.y, isActive ? 35 : 15
       );
       if (isActive) {
         gradient.addColorStop(0, 'rgba(255, 200, 50, 0.8)');
@@ -217,7 +198,7 @@ export default function WeldingCanvas({
         gradient.addColorStop(1, 'rgba(100, 150, 255, 0)');
       }
       ctx.beginPath();
-      ctx.arc(safePosition.x, safePosition.y, isActive ? 35 : 15, 0, Math.PI * 2);
+      ctx.arc(position.x, position.y, isActive ? 35 : 15, 0, Math.PI * 2);
       ctx.fillStyle = gradient;
       ctx.fill();
 
@@ -225,15 +206,15 @@ export default function WeldingCanvas({
       ctx.strokeStyle = isActive ? '#ffcc00' : '#6496ff';
       ctx.lineWidth = 1.5;
       ctx.beginPath();
-      ctx.moveTo(safePosition.x - 12, safePosition.y);
-      ctx.lineTo(safePosition.x + 12, safePosition.y);
-      ctx.moveTo(safePosition.x, safePosition.y - 12);
-      ctx.lineTo(safePosition.x, safePosition.y + 12);
+      ctx.moveTo(position.x - 12, position.y);
+      ctx.lineTo(position.x + 12, position.y);
+      ctx.moveTo(position.x, position.y - 12);
+      ctx.lineTo(position.x, position.y + 12);
       ctx.stroke();
 
       // Nozzle circle
       ctx.beginPath();
-      ctx.arc(safePosition.x, safePosition.y, 6, 0, Math.PI * 2);
+      ctx.arc(position.x, position.y, 6, 0, Math.PI * 2);
       ctx.strokeStyle = isActive ? '#ffaa00' : '#4488ff';
       ctx.lineWidth = 2;
       ctx.stroke();
@@ -254,7 +235,7 @@ export default function WeldingCanvas({
       ctx.fillStyle = '#06b6d4';
       ctx.font = '12px Inter, sans-serif';
       ctx.textAlign = 'right';
-      ctx.fillText(`Speed: ${safeSpeed.toFixed(0)} px/s`, width - 10, height - 10);
+      ctx.fillText(`Speed: ${speed.toFixed(0)} px/s`, width - 10, height - 10);
     }
 
     animFrameRef.current = requestAnimationFrame(draw);

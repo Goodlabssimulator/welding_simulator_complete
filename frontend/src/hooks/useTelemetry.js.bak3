@@ -73,10 +73,10 @@ export default function useTelemetry(canvasRef, jointLine) {
       const pixelDist = Math.sqrt(dx * dx + dy * dy);
       const dt = (now - prevTimeRef.current) / 1000; // seconds
       
-      // [speed-scale-2] Two speed values:
-      // - mmDist: physical distance for total-distance tracking
-      // - speedMmS: normalized to realistic welding speed (1-10 mm/s)
-      const mmDist = pixelDist / 3;
+      // [speed-scale] Convert pixel speed to realistic mm/s range.
+      // A typical mouse moves 100-800 px/s on the canvas.
+      // We map that to a realistic welding speed of 1-8 mm/s.
+      // Formula: realistic = clamp(px/s / 60, 0.5, 10)
       const pxPerSec = dt > 0 ? pixelDist / dt : 0;
       const speedMmS = Math.max(0.5, Math.min(10, pxPerSec / 60));
 

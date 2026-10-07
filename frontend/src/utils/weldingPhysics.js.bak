@@ -157,19 +157,10 @@ export function getBeadVisuals(params, time = 0) {
   // Spark count for visual effects
   const sparkCount = Math.floor(arcIntensity * 5 + Math.random() * 3);
 
-  const beadColorStr = `rgb(${r},${g},${b})`;
-    const beadWidthPx = geometry.beadWidth * 3;
-    const beadHeightPx = geometry.beadHeight * 2;
-
-    return {
-      // [bead-aliases] provide both naming styles
-      color: beadColorStr,
-      width: beadWidthPx,
-      height: beadHeightPx,
-      highlight: 'rgba(255,220,180,0.55)',
-      beadColor: beadColorStr,
-      beadWidth: beadWidthPx,
-      beadHeight: beadHeightPx,
+  return {
+    beadColor: `rgb(${r},${g},${b})`,
+    beadWidth: geometry.beadWidth * 3, // Scale for canvas pixels
+    beadHeight: geometry.beadHeight * 2,
     arcIntensity,
     arcColor: `rgba(100, 181, 246, ${arcIntensity})`,
     arcGlowSize: 15 + arcIntensity * 20,
