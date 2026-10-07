@@ -1,5 +1,7 @@
 /**
- * API Client - Axios-based HTTP client with auth interceptors
+ * API Client - Axios-based HTTP client with auth interceptors.
+ *
+ * Paths mirror backend/src/routes/*.js exactly.
  */
 
 import axios from 'axios';
@@ -8,12 +10,12 @@ import { API_BASE } from './constants';
 const apiClient = axios.create({
   baseURL: API_BASE,
   timeout: 15000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
 });
 
-// Request interceptor - attach auth token
+// ============================================================
+// Request interceptor — attach bearer token
+// ============================================================
 apiClient.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('weldsim_token');
@@ -25,59 +27,107 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor - handle auth errors
+// ============================================================
+// Response interceptor — handle auth errors
+// ============================================================
 apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    const url = error.config?.url || '';
+
+    // Don't nuke token on /auth/me failing — the useAuth hook
+    // already handles that path explicitly.
+    const isAuthCheck = url.includes('/auth/me');
+
+    if (status === 401 && !isAuthCheck) {
       localStorage.removeItem('weldsim_token');
+      localStorage.removeItem('weldsim_refresh_token');
       localStorage.removeItem('weldsim_user');
-      window.location.href = '/login';
+      // Avoid redirect loop if already on /login
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
+
+    // Normalize error shape: expose backend's {error, code} object
     return Promise.reject(error.response?.data || error);
   }
 );
 
-// Auth API
+// ============================================================
+// Auth API  →  /api/auth/*
+// ============================================================
 export const authAPI = {
-  login: (credentials) => apiClient.post('/auth/login', credentials),
   register: (data) => apiClient.post('/auth/register', data),
+  login: (credentials) => apiClient.post('/auth/login', credentials),
+  refresh: (refreshToken) => apiClient.post('/auth/refresh', { refreshToken }),
+  logout: () => apiClient.delete('/auth/logout'),
   me: () => apiClient.get('/auth/me'),
 };
 
-// Welding API
+// ============================================================
+// Welding API  →  /api/welding/*
+// ============================================================
 export const weldingAPI = {
-  startSession: (config) => apiClient.post('/welding/session/start', config),
-  submitTelemetry: (sessionId, telemetry) => apiClient.post(`/welding/session/${sessionId}/telemetry`, telemetry),
-  completeSession: (sessionId) => apiClient.post(`/welding/session/${sessionId}/complete`),
-  getSessions: () => apiClient.get('/welding/sessions'),
+  // Get available joint types, electrodes, positions
+  getConfig: () => apiClient.get('/welding/config'),
+
+  // Session lifecycle
+  startSession: (payload) => apiClient.post('/welding/session/start', payload),
+  submitTelemetry: (sessionId, payload) =>
+    apiClient.put(`/welding/session/${sessionId}/telemetry`, payload),
+  completeSession: (sessionId, payload = {}) =>
+    apiClient.post(`/welding/session/${sessionId}/complete`, payload),
+
+  // Read
   getSession: (sessionId) => apiClient.get(`/welding/session/${sessionId}`),
+  getSessions: (params) => apiClient.get('/welding/sessions', { params }),
 };
 
-// Assessment API
+// ============================================================
+// Assessment API  →  /api/assessment/*
+// ============================================================
 export const assessmentAPI = {
-  getResults: (sessionId) => apiClient.get(`/assessment/results/${sessionId}`),
-  getHistory: () => apiClient.get('/assessment/history'),
-  getCompetencies: (sessionId) => apiClient.get(`/assessment/competencies/${sessionId}`),
+  getResults: (sessionId) => apiClient.get(`/assessment/${sessionId}`),
+  getDefects: (sessionId) => apiClient.get(`/assessment/${sessionId}/defects`),
+  getFeedback: (sessionId) => apiClient.get(`/assessment/${sessionId}/feedback`),
+  getCompetencies: (sessionId) => apiClient.get(`/assessment/${sessionId}/competency`),
 };
 
-// Analytics API
+// ============================================================
+// Analytics API  →  /api/analytics/*
+// ============================================================
 export const analyticsAPI = {
-  getDashboard: () => apiClient.get('/analytics/dashboard'),
-  getTrends: (params) => apiClient.get('/analytics/trends', { params }),
-  getCompetencyProgress: () => apiClient.get('/analytics/competency-progress'),
-  getTrainerOverview: () => apiClient.get('/analytics/trainer-overview'),
-  getStudentList: (params) => apiClient.get('/analytics/students', { params }),
+  // Student
+  getStudentSummary: (studentId) =>
+    apiClient.get(`/analytics/student/${studentId}/summary`),
+  getStudentTrends: (studentId, params) =>
+    apiClient.get(`/analytics/student/${studentId}/trends`, { params }),
+  getStudentCompetencies: (studentId) =>
+    apiClient.get(`/analytics/student/${studentId}/competencies`),
+  getStudentProgress: (studentId) =>
+    apiClient.get(`/analytics/student/${studentId}/progress`),
+
+  // Trainer
+  getTrainerClassSummary: (params) =>
+    apiClient.get('/analytics/trainer/class-summary', { params }),
+  getTrainerStudentProgress: (studentId) =>
+    apiClient.get(`/analytics/trainer/student/${studentId}/progress`),
+  getTrainerCompetencyReport: () =>
+    apiClient.get('/analytics/trainer/competency-report'),
 };
 
-// Tutor API
+// ============================================================
+// Tutor API  →  /api/tutor/*
+// ============================================================
 export const tutorAPI = {
-  getRecommendations: () => apiClient.get('/tutor/recommendations'),
-  getPracticePlan: (params) => apiClient.post('/tutor/practice-plan', params),
-  getProgress: () => apiClient.get('/tutor/progress'),
-  getLearningPath: () => apiClient.get('/tutor/learning-path'),
-  getContextualTip: (context) => apiClient.post('/tutor/contextual-tip', context),
-  getMilestones: () => apiClient.get('/tutor/milestones'),
+  getRecommendations: (studentId) =>
+    apiClient.get(`/tutor/${studentId}/recommendations`),
+  generatePractice: (studentId, focusArea) =>
+    apiClient.post(`/tutor/${studentId}/practice`, { focusArea }),
+  getProgress: (studentId) =>
+    apiClient.get(`/tutor/${studentId}/progress`),
 };
 
 export default apiClient;

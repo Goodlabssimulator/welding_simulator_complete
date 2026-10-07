@@ -94,33 +94,47 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    // [clean-refresh]
     const original = error.config || {};
     const status = error.response?.status;
     const url = original.url || '';
 
-    // Never try to refresh these — they are the auth flow itself
+    // ---- Paths that must NOT trigger refresh ----
     const isAuthEndpoint =
       url.includes('/auth/login') ||
       url.includes('/auth/register') ||
-      url.includes('/auth/refresh');
+      url.includes('/auth/refresh') ||
+      url.includes('/auth/logout');
 
+    const isMeCheck = url.includes('/auth/me');
+
+    // Only attempt refresh once per request
     const alreadyRetried = original.__retried;
 
-    if (status === 401 && !isAuthEndpoint && !alreadyRetried) {
+    // ---- 401 handling ----
+    if (status === 401 && !isAuthEndpoint && !isMeCheck && !alreadyRetried) {
       try {
         const newToken = await performRefresh();
+
+        // Retry the original request with the new token
         original.__retried = true;
         original.headers = original.headers || {};
         original.headers.Authorization = `Bearer ${newToken}`;
         return apiClient(original);
       } catch (refreshErr) {
-        // Refresh failed — clear and redirect to login
+        // Refresh failed — clear state and redirect
         clearAuthStorage();
         if (window.location.pathname !== '/login') {
           window.location.href = '/login';
         }
         return Promise.reject(refreshErr);
+      }
+    }
+
+    // ---- Other 401s (auth endpoints, already-retried, me-check) ----
+    if (status === 401 && (isAuthEndpoint || isMeCheck || alreadyRetried)) {
+      clearAuthStorage();
+      if (!isMeCheck && window.location.pathname !== '/login') {
+        window.location.href = '/login';
       }
     }
 
