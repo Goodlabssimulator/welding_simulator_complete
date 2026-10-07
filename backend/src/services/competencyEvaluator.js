@@ -147,6 +147,54 @@ class CompetencyEvaluator {
       return `Not yet competent. Related scores: ${parts.join(', ')}. Significant improvement needed.`;
     }
   }
+
+  /**
+   * Adapter for welding.js — accepts (assessment, session, frameworkRows)
+   * and returns records ready for insertion into competency_records.
+   */
+  evaluateFromSession(assessment, session, frameworkRows) {
+    const codeToKeys = {
+      'JP-01': ['processControl', 'alignment'],
+      'WP-01': ['processControl'],
+      'TC-01': ['alignment', 'consistency'],
+      'TS-01': ['speedAccuracy', 'consistency'],
+      'DI-01': ['beadQuality', 'fusionQuality'],
+      'WQ-01': ['beadQuality', 'penetration'],
+      'SA-01': ['processControl', 'consistency'],
+    };
+
+    const scoreOf = (key) => {
+      const map = {
+        speedAccuracy: assessment.speedAccuracy,
+        beadQuality: assessment.beadQuality,
+        fusionQuality: assessment.fusionQuality,
+        penetration: assessment.penetration,
+        alignment: assessment.alignment,
+        consistency: assessment.consistency,
+        processControl: assessment.processControl,
+      };
+      return map[key] ?? 0;
+    };
+
+    const results = [];
+    for (const row of frameworkRows) {
+      const keys = codeToKeys[row.code];
+      if (!keys) continue;
+      const scores = keys.map(scoreOf);
+      const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+      const level = this._assignLevel(avg);
+
+      results.push({
+        frameworkId: row.id,
+        code: row.code,
+        name: row.name,
+        level,
+        score: Math.round(avg * 10) / 10,
+        evidence: { keys, scores },
+      });
+    }
+    return results;
+  }
 }
 
 module.exports = { CompetencyEvaluator };

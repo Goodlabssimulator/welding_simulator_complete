@@ -1,3 +1,9 @@
+const SEVERITY_MAP = {
+  low: 'minor',
+  medium: 'moderate',
+  high: 'severe',
+};
+
 /**
  * Defect Predictor Service
  * 
@@ -328,6 +334,26 @@ class DefectPredictor {
     if (session.material_thickness && session.material_thickness < 6) prob += 0.15;
 
     return this._makePrediction('distortion', Math.min(prob, 0.95), prob > 0.4 ? 'high' : prob > 0.2 ? 'medium' : 'low');
+  }
+
+  /**
+   * Adapter for welding.js — accepts (telemetry, session) and returns
+   * defect objects with DB-compatible fields.
+   */
+  predictFromTelemetry(telemetry, session) {
+    const raw = this.predict(session, telemetry, null);
+    return raw.map((d) => ({
+      type: d.defectType,
+      defectType: d.defectType,
+      category: d.defectCategory,
+      defectCategory: d.defectCategory,
+      severity: SEVERITY_MAP[d.severity] || 'minor',
+      originalSeverity: d.severity,
+      probability: d.probability,
+      description: d.description,
+      cause: (d.causes && d.causes[0]) || 'Multiple factors',
+      correctiveAction: d.recommendation,
+    }));
   }
 }
 

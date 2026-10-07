@@ -335,6 +335,32 @@ class AssessmentService {
     const weaknesses = entries.filter(([, v]) => v < 50).map(([k]) => k);
     return { strengths, weaknesses };
   }
+
+  /**
+   * Adapter for welding.js — accepts (telemetry, session) and returns
+   * fields the route expects.
+   */
+  evaluate(telemetry, session) {
+    const result = this.assess(session, telemetry);
+    const params = this._extractParameters(telemetry);
+    return {
+      overallScore: result.overallScore,
+      grade: result.grade,
+      speedAccuracy: result.speedAccuracyScore,
+      beadQuality: result.beadQualityScore,
+      fusionQuality: result.fusionQualityScore,
+      penetration: result.penetrationScore,
+      alignment: result.alignmentScore,
+      consistency: result.consistencyScore,
+      processControl: result.processControlScore,
+      avgSpeed: this._mean(params.speed),
+      avgDeviation: 0,
+      maxDeviation: 0,
+      speedVariance: this._stdDev(params.speed),
+      strengths: result.strengths,
+      weaknesses: result.weaknesses,
+    };
+  }
 }
 
 module.exports = { AssessmentService };

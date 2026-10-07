@@ -168,15 +168,24 @@ router.post('/session/:id/complete', async (req, res, next) => {
     // Run assessment pipeline
     const assessmentService = new AssessmentService();
     const assessment = assessmentService.evaluate(telemetryData, sessionResult.rows[0]);
-    
+
     const defectPredictor = new DefectPredictor();
-    const defects = defectPredictor.predict(telemetryData, sessionResult.rows[0]);
-    
-    const feedbackGenerator = new FeedbackGenerator();
-    const feedback = feedbackGenerator.generate(assessment, defects, sessionResult.rows[0]);
-    
+    const defects = defectPredictor.predictFromTelemetry(telemetryData, sessionResult.rows[0]);
+
+    // Fetch competency framework for evaluation
+    const frameworkResult = await query(
+      'SELECT id, code, name, category FROM competency_framework ORDER BY code'
+    );
+
     const competencyEvaluator = new CompetencyEvaluator();
-    const competencies = competencyEvaluator.evaluate(assessment, defects, sessionResult.rows[0]);
+    const competencies = competencyEvaluator.evaluateFromSession(
+      assessment,
+      sessionResult.rows[0],
+      frameworkResult.rows
+    );
+
+    const feedbackGenerator = new FeedbackGenerator();
+    const feedback = feedbackGenerator.generate(assessment, defects, competencies, sessionResult.rows[0]);
     
     // Store assessment
     const assessmentResult = await query(
