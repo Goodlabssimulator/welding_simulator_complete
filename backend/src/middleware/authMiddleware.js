@@ -6,7 +6,7 @@
  */
 
 const jwt = require('jsonwebtoken');
-const config = require('../../config/env.example');
+const config = require('../../config/env');
 const { query } = require('../utils/database');
 
 /**

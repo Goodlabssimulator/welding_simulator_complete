@@ -6,7 +6,7 @@
  */
 
 const { Pool } = require('pg');
-const config = require('../../config/env.example');
+const config = require('../../config/env');
 
 const pool = new Pool({
   host: config.DB_HOST,

@@ -5,7 +5,7 @@
  * Includes error logging and development vs production details.
  */
 
-const config = require('../../config/env.example');
+const config = require('../../config/env');
 
 /**
  * Custom application error with HTTP status code
