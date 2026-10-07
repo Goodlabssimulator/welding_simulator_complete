@@ -1,14 +1,10 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import useTelemetry from '../../hooks/useTelemetry';
-import {
-  generateJointLine,
-  getBeadVisuals,
-  generateSparks,
-  calculateDeviation,
-} from '../../utils/weldingPhysics';
+import { generateJointLine, getBeadVisuals, generateSparks, calculateDeviation } from '../../utils/weldingPhysics';
 
 /**
  * Map our current UI parameter names to the names weldingPhysics expects.
+ * weldingPhysics was written for: { current, voltage, speed, weldType }
  */
 function toPhysicsParams(p = {}) {
   return {
@@ -42,62 +38,50 @@ export default function WeldingCanvas({
     handlers,
   } = useTelemetry(canvasRef, jointLineRef.current);
 
-  // Safe defaults in case position/speed are briefly undefined
+  // [safe-defaults] Prevent crashes if position is briefly undefined
   const safePosition = position || { x: 0, y: 0 };
-  const safeSpeed = typeof speed === 'number' && Number.isFinite(speed) ? speed : 0;
-  const safeDeviation =
-    typeof deviation === 'number' && Number.isFinite(deviation) ? deviation : 0;
+  const safeSpeed = typeof speed === 'number' ? speed : 0;
+  const safeDeviation = typeof deviation === 'number' ? deviation : 0;
 
-  // ---- Initialize joint line & reset canvas when joint type changes ----
+  // Initialize joint line
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     setCanvasSize({ width: rect.width, height: rect.height });
-    jointLineRef.current = generateJointLine(
-      jointType || 'butt',
-      rect.width,
-      rect.height
-    );
+    jointLineRef.current = generateJointLine(jointType || 'butt', rect.width, rect.height);
     beadPathRef.current = [];
     sparksRef.current = [];
   }, [jointType]);
 
-  // ---- Notify parent on position/speed/telemetry changes ----
+  // Notify parent of position/speed changes
   useEffect(() => {
     if (onPositionChange) {
-      onPositionChange({
-        x: safePosition.x,
-        y: safePosition.y,
-        speed: safeSpeed,
-        deviation: safeDeviation,
-        isTracking,
-      });
+      onPositionChange({ x: safePosition.x, y: safePosition.y, speed, deviation, isTracking });
     }
     if (onTelemetry && isTracking) {
-      const dev = calculateDeviation(safePosition, jointLineRef.current);
+      const dev = calculateDeviation(position, jointLineRef.current);
       onTelemetry({
         x: safePosition.x,
         y: safePosition.y,
-        speed: safeSpeed,
+        speed,
         deviation: dev,
         timestamp: Date.now(),
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [safePosition.x, safePosition.y, safeSpeed, safeDeviation, isTracking]);
+  }, [position, speed, deviation, isTracking]);
 
-  // ---- Generate sparks while actively welding ----
+  // Spark generation when welding active
   useEffect(() => {
     if (!isActive || !isTracking) return;
     const interval = setInterval(() => {
-      const newSparks = generateSparks(safePosition, parameters);
+      const newSparks = generateSparks(position, parameters);
       sparksRef.current = [...sparksRef.current.slice(-30), ...newSparks];
     }, 50);
     return () => clearInterval(interval);
-  }, [isActive, isTracking, safePosition.x, safePosition.y, parameters]);
+  }, [isActive, isTracking, position, parameters]);
 
-  // ---- Draw loop ----
+  // Draw loop
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -107,11 +91,11 @@ export default function WeldingCanvas({
     // Clear
     ctx.clearRect(0, 0, width, height);
 
-    // ---- Background: metal plate ----
+    // Background - metal plate
     ctx.fillStyle = '#3a3a4a';
     ctx.fillRect(0, 0, width, height);
 
-    // Plate texture grid
+    // Plate texture lines
     ctx.strokeStyle = '#454560';
     ctx.lineWidth = 0.5;
     for (let i = 0; i < width; i += 20) {
@@ -127,9 +111,9 @@ export default function WeldingCanvas({
       ctx.stroke();
     }
 
-    // ---- Joint line ----
+    // Draw joint line
     const joint = jointLineRef.current;
-    if (joint && joint.length > 1) {
+    if (joint.length > 1) {
       ctx.beginPath();
       ctx.moveTo(joint[0].x, joint[0].y);
       for (let i = 1; i < joint.length; i++) {
@@ -139,93 +123,71 @@ export default function WeldingCanvas({
       ctx.lineWidth = 4;
       ctx.stroke();
 
+      // Joint edge highlights
       ctx.strokeStyle = '#555570';
       ctx.lineWidth = 1;
       ctx.stroke();
     }
 
-    // =====================================================
-    // BEAD: accumulate only while welding; draw always
-    // =====================================================
-
-    // 1) Accumulate new bead points when the user is actively welding
-    if (isActive && isTracking) {
-      const path = beadPathRef.current;
-      const last = path[path.length - 1];
-      const dist = last
-        ? Math.hypot(safePosition.x - last.x, safePosition.y - last.y)
-        : Infinity;
-
-      if (dist > 1.5) {
-        path.push({
+    // Draw deposited bead
+    if (isActive && isTracking && beadPathRef.current) {
+      const lastPoint = beadPathRef.current[beadPathRef.current.length - 1];
+      if (!lastPoint ||
+          Math.hypot(safePosition.x - lastPoint.x, safePosition.y - lastPoint.y) > 2) {
+        beadPathRef.current.push({
           x: safePosition.x,
           y: safePosition.y,
-          speed: safeSpeed,
-          voltage: parameters.voltage ?? 24,
-          current: parameters.current ?? 120,
-          wireSpeed: parameters.wireFeedSpeed ?? 6,
+          speed,
+          voltage: parameters.voltage,
+          current: parameters.current,
+          wireSpeed: parameters.wireFeedSpeed,
         });
       }
-    }
 
-    // 2) Draw the entire accumulated bead path (independent of tracking state)
-    const path = beadPathRef.current;
-    if (path.length > 1) {
-      for (let i = 1; i < path.length; i++) {
-        const prev = path[i - 1];
-        const curr = path[i];
+      const beadVisuals = getBeadVisuals(toPhysicsParams(parameters), 0);
 
-        const visuals = getBeadVisuals(
-          {
-            current: curr.current || 120,
-            voltage: curr.voltage || 24,
-            speed: curr.speed || 4,
-            weldType: parameters.weldType || 'SMAW',
-          },
+      for (let i = 1; i < beadPathRef.current.length; i++) {
+        const prev = beadPathRef.current[i - 1];
+        const curr = beadPathRef.current[i];
+        const currVisuals = getBeadVisuals(
+          { current: curr.current, voltage: curr.voltage, speed: curr.speed, weldType: parameters.weldType },
           0
         );
-
-        const widthPx =
-          Number.isFinite(visuals.width) && visuals.width > 0
-            ? visuals.width
-            : 8;
-        const colorStr = visuals.color || 'rgb(200, 120, 50)';
-        const highlightStr = visuals.highlight || 'rgba(255,220,180,0.5)';
 
         // Bead body
         ctx.beginPath();
         ctx.moveTo(prev.x, prev.y);
         ctx.lineTo(curr.x, curr.y);
-        ctx.strokeStyle = colorStr;
-        ctx.lineWidth = widthPx;
+        ctx.strokeStyle = currVisuals.color;
+        ctx.lineWidth = currVisuals.width;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
         ctx.stroke();
 
-        // Highlight (top reflection)
+        // Bead highlight (top reflection)
         ctx.beginPath();
-        ctx.moveTo(prev.x, prev.y - widthPx * 0.2);
-        ctx.lineTo(curr.x, curr.y - widthPx * 0.2);
-        ctx.strokeStyle = highlightStr;
-        ctx.lineWidth = widthPx * 0.3;
+        ctx.moveTo(prev.x, prev.y - currVisuals.width * 0.2);
+        ctx.lineTo(curr.x, curr.y - currVisuals.width * 0.2);
+        ctx.strokeStyle = currVisuals.highlight;
+        ctx.lineWidth = currVisuals.width * 0.3;
         ctx.stroke();
 
-        // Shadow (bottom)
+        // Bead shadow (bottom)
         ctx.beginPath();
-        ctx.moveTo(prev.x, prev.y + widthPx * 0.15);
-        ctx.lineTo(curr.x, curr.y + widthPx * 0.15);
+        ctx.moveTo(prev.x, prev.y + currVisuals.width * 0.15);
+        ctx.lineTo(curr.x, curr.y + currVisuals.width * 0.15);
         ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-        ctx.lineWidth = widthPx * 0.2;
+        ctx.lineWidth = currVisuals.width * 0.2;
         ctx.stroke();
       }
     }
 
-    // ---- Sparks ----
+    // Draw sparks
     const now = Date.now();
-    sparksRef.current = sparksRef.current.filter((s) => now - s.born < s.life);
-    sparksRef.current.forEach((spark) => {
+    sparksRef.current = sparksRef.current.filter(s => now - s.born < s.life);
+    sparksRef.current.forEach(spark => {
       const age = (now - spark.born) / spark.life;
-      const alpha = Math.max(0, 1 - age);
+      const alpha = 1 - age;
       const size = spark.size * (1 - age * 0.5);
       ctx.beginPath();
       ctx.arc(
@@ -239,15 +201,12 @@ export default function WeldingCanvas({
       ctx.fill();
     });
 
-    // ---- Torch indicator ----
+    // Draw torch indicator
     if (isTracking) {
+      // Torch glow
       const gradient = ctx.createRadialGradient(
-        safePosition.x,
-        safePosition.y,
-        0,
-        safePosition.x,
-        safePosition.y,
-        isActive ? 35 : 15
+        safePosition.x, safePosition.y, 0,
+        safePosition.x, safePosition.y, isActive ? 35 : 15
       );
       if (isActive) {
         gradient.addColorStop(0, 'rgba(255, 200, 50, 0.8)');
@@ -280,30 +239,26 @@ export default function WeldingCanvas({
       ctx.stroke();
     }
 
-    // ---- HUD: deviation + speed ----
-    if (isActive && isTracking && joint && joint.length > 0) {
-      const dev = calculateDeviation(safePosition, joint);
+    // Deviation indicator
+    if (isActive && isTracking && joint.length > 0) {
+      const dev = calculateDeviation(position, joint);
       const devColor = dev < 5 ? '#10b981' : dev < 15 ? '#f59e0b' : '#ef4444';
       ctx.fillStyle = devColor;
       ctx.font = '12px Inter, sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText(`Dev: ${dev.toFixed(1)}px`, 10, height - 10);
+    }
 
+    // Speed indicator
+    if (isActive && isTracking) {
       ctx.fillStyle = '#06b6d4';
+      ctx.font = '12px Inter, sans-serif';
       ctx.textAlign = 'right';
-      ctx.fillText(`Speed: ${safeSpeed.toFixed(1)} mm/s`, width - 10, height - 10);
+      ctx.fillText(`Speed: ${safeSpeed.toFixed(0)} px/s`, width - 10, height - 10);
     }
 
     animFrameRef.current = requestAnimationFrame(draw);
-  }, [
-    canvasSize,
-    isActive,
-    isTracking,
-    safePosition.x,
-    safePosition.y,
-    safeSpeed,
-    parameters,
-  ]);
+  }, [canvasSize, isActive, isTracking, position, speed, parameters]);
 
   useEffect(() => {
     animFrameRef.current = requestAnimationFrame(draw);
@@ -311,6 +266,12 @@ export default function WeldingCanvas({
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, [draw]);
+
+  // Reset bead path
+  const resetCanvas = useCallback(() => {
+    beadPathRef.current = [];
+    sparksRef.current = [];
+  }, []);
 
   return (
     <div className="welding-canvas-wrapper">
