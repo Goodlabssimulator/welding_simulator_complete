@@ -1,11 +1,23 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import LoginForm from '../components/Auth/LoginForm';
 import RegisterForm from '../components/Auth/RegisterForm';
 
 export default function LoginPage() {
-  const { isAuthenticated, user } = useAuth();
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [showRegister, setShowRegister] = useState(false);
+
+  // Redirect once authenticated
+  useEffect(() => {
+    if (!user) return;
+    if (user.role === 'trainer' || user.role === 'admin') {
+      navigate('/trainer', { replace: true });
+    } else {
+      navigate('/student', { replace: true });
+    }
+  }, [user, navigate]);
 
   return (
     <div className="login-page">
