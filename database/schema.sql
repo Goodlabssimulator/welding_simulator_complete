@@ -26,7 +26,7 @@ CREATE INDEX IF NOT EXISTS idx_users_cohort ON users(cohort);
 -- JOINT TYPES
 CREATE TABLE IF NOT EXISTS joint_types (
     id               SERIAL PRIMARY KEY,
-    name             VARCHAR(50) NOT NULL,
+    name             VARCHAR(50) NOT NULL UNIQUE,
     description      TEXT,
     difficulty_level VARCHAR(20) CHECK (difficulty_level IN ('beginner', 'intermediate', 'advanced')),
     created_at       TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -42,7 +42,7 @@ ON CONFLICT DO NOTHING;
 -- ELECTRODE TYPES
 CREATE TABLE IF NOT EXISTS electrode_types (
     id                      SERIAL PRIMARY KEY,
-    code                    VARCHAR(20) NOT NULL,
+    code                    VARCHAR(20) NOT NULL UNIQUE,
     name                    VARCHAR(100) NOT NULL,
     description             TEXT,
     recommended_current_min DECIMAL(6,2),
@@ -61,7 +61,7 @@ ON CONFLICT DO NOTHING;
 -- WELDING POSITIONS
 CREATE TABLE IF NOT EXISTS welding_positions (
     id          SERIAL PRIMARY KEY,
-    code        VARCHAR(20) NOT NULL,
+    code        VARCHAR(20) NOT NULL UNIQUE,
     name        VARCHAR(100) NOT NULL,
     difficulty  INTEGER CHECK (difficulty BETWEEN 1 AND 5),
     description TEXT
