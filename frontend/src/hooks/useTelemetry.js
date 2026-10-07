@@ -1,0 +1,167 @@
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { TELEMETRY_SAMPLE_RATE } from '../utils/constants';
+
+/**
+ * Custom hook for tracking mouse/touch position and computing
+ * real-time welding telemetry (position, speed, deviation, etc.)
+ */
+export default function useTelemetry(canvasRef, jointLine) {
+  const [torchPosition, setTorchPosition] = useState({ x: 0, y: 0 });
+  const [isTracking, setIsTracking] = useState(false);
+  const [currentSpeed, setCurrentSpeed] = useState(0);
+  const [pathDeviation, setPathDeviation] = useState(0);
+  const [totalDistance, setTotalDistance] = useState(0);
+  const [pathPoints, setPathPoints] = useState([]);
+
+  const prevPosRef = useRef(null);
+  const prevTimeRef = useRef(null);
+  const speedHistoryRef = useRef([]);
+  const trackingRef = useRef(false);
+
+  // Start tracking on mouse/touch down
+  const startTracking = useCallback((e) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    let clientX, clientY;
+    if (e.touches) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    setTorchPosition({ x, y });
+    setIsTracking(true);
+    trackingRef.current = true;
+    prevPosRef.current = { x, y };
+    prevTimeRef.current = performance.now();
+    setPathPoints([{ x, y, timestamp: Date.now() }]);
+    setTotalDistance(0);
+    speedHistoryRef.current = [];
+  }, [canvasRef]);
+
+  // Track movement
+  const trackMove = useCallback((e) => {
+    if (!trackingRef.current) return;
+
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    let clientX, clientY;
+    if (e.touches) {
+      e.preventDefault();
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const now = performance.now();
+
+    // Calculate speed (mm/s)
+    if (prevPosRef.current && prevTimeRef.current) {
+      const dx = x - prevPosRef.current.x;
+      const dy = y - prevPosRef.current.y;
+      const pixelDist = Math.sqrt(dx * dx + dy * dy);
+      const dt = (now - prevTimeRef.current) / 1000; // seconds
+      
+      // Convert pixels to mm (approx 3px = 1mm)
+      const mmDist = pixelDist / 3;
+      const speedMmS = dt > 0 ? mmDist / dt : 0;
+
+      setCurrentSpeed(Math.round(speedMmS * 10) / 10);
+      speedHistoryRef.current.push(speedMmS);
+      
+      // Keep last 50 readings for variance
+      if (speedHistoryRef.current.length > 50) {
+        speedHistoryRef.current.shift();
+      }
+
+      setTotalDistance(prev => prev + mmDist);
+    }
+
+    // Calculate path deviation
+    if (jointLine && jointLine.length > 0) {
+      let minDist = Infinity;
+      for (const point of jointLine) {
+        const dx = x - point.x;
+        const dy = y - point.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < minDist) minDist = dist;
+      }
+      setPathDeviation(Math.round((minDist / 3) * 100) / 100);
+    }
+
+    setTorchPosition({ x, y });
+    prevPosRef.current = { x, y };
+    prevTimeRef.current = now;
+
+    setPathPoints(prev => [...prev, { x, y, timestamp: Date.now() }]);
+  }, [canvasRef, jointLine]);
+
+  // Stop tracking
+  const stopTracking = useCallback(() => {
+    setIsTracking(false);
+    trackingRef.current = false;
+    setCurrentSpeed(0);
+  }, []);
+
+  // Get speed variance
+  const getSpeedVariance = useCallback(() => {
+    const history = speedHistoryRef.current;
+    if (history.length < 2) return 0;
+    const mean = history.reduce((a, b) => a + b, 0) / history.length;
+    const variance = history.reduce((a, b) => a + (b - mean) ** 2, 0) / history.length;
+    return Math.round(Math.sqrt(variance) * 100) / 100;
+  }, []);
+
+  // Get current telemetry snapshot
+  const getTelemetrySnapshot = useCallback(() => {
+    return {
+      x: torchPosition.x,
+      y: torchPosition.y,
+      speed: currentSpeed,
+      pathDeviation,
+      speedVariance: getSpeedVariance(),
+      totalDistance: Math.round(totalDistance * 10) / 10,
+      timestamp_ms: Date.now(),
+    };
+  }, [torchPosition, currentSpeed, pathDeviation, totalDistance, getSpeedVariance]);
+
+  // Reset
+  const resetTelemetry = useCallback(() => {
+    setTorchPosition({ x: 0, y: 0 });
+    setIsTracking(false);
+    setCurrentSpeed(0);
+    setPathDeviation(0);
+    setTotalDistance(0);
+    setPathPoints([]);
+    prevPosRef.current = null;
+    prevTimeRef.current = null;
+    speedHistoryRef.current = [];
+    trackingRef.current = false;
+  }, []);
+
+  return {
+    torchPosition,
+    isTracking,
+    currentSpeed,
+    pathDeviation,
+    totalDistance,
+    pathPoints,
+    startTracking,
+    trackMove,
+    stopTracking,
+    getSpeedVariance,
+    getTelemetrySnapshot,
+    resetTelemetry,
+  };
+}

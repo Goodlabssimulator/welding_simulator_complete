@@ -1,0 +1,378 @@
+/**
+ * Feedback Generator Service
+ * 
+ * Generates personalized, narrative feedback for welding trainees based on
+ * assessment results, defect predictions, and competency evaluation.
+ */
+
+class FeedbackGenerator {
+  constructor() {
+    this.scoreLabels = {
+      speedAccuracy: 'Speed Accuracy',
+      beadQuality: 'Bead Quality',
+      fusionQuality: 'Fusion Quality',
+      penetration: 'Penetration',
+      alignment: 'Alignment',
+      consistency: 'Consistency',
+      processControl: 'Process Control',
+    };
+
+    this.gradeMessages = {
+      distinction: {
+        title: 'Outstanding Performance!',
+        template: 'Your welding technique demonstrates exceptional proficiency. You consistently maintained optimal parameters throughout the session, resulting in high-quality welds. Keep challenging yourself with more complex joints and positions.',
+      },
+      credit: {
+        title: 'Strong Performance',
+        template: 'You showed solid welding technique with generally good parameter control. A few areas need refinement to reach distinction level. Focus on the specific improvements below to elevate your performance.',
+      },
+      pass: {
+        title: 'Satisfactory Performance',
+        template: 'You met the minimum competency requirements. Your welds are functional, but several areas need improvement to ensure consistent quality. Review the feedback below and practice the recommended exercises.',
+      },
+      fail: {
+        title: 'Below Standard',
+        template: 'Your performance did not meet the minimum competency requirements. This is a learning opportunity — review the detailed feedback carefully and practice the fundamental exercises recommended below. Don\'t hesitate to ask your instructor for additional guidance.',
+      },
+    };
+  }
+
+  /**
+   * Generate comprehensive feedback.
+   * @param {Object} assessment - Assessment result with scores and grade
+   * @param {Array} defects - Defect predictions
+   * @param {Object} competencyResults - Competency evaluation results
+   * @param {Object} session - Welding session details
+   * @returns {Object} feedback with summary, strengths, weaknesses, improvements, practice recommendations
+   */
+  generate(assessment, defects, competencyResults, session) {
+    const gradeFeedback = this.gradeMessages[assessment.grade] || this.gradeMessages.fail;
+    const processLabel = session.process_type || 'SMAW';
+    const jointLabel = session.joint_type || 'butt joint';
+    const positionLabel = session.position_code || '1G';
+
+    // Build strengths
+    const strengths = this._buildStrengths(assessment);
+
+    // Build weaknesses
+    const weaknesses = this._buildWeaknesses(assessment, defects);
+
+    // Build improvement suggestions
+    const improvements = this._buildImprovements(assessment, defects, session);
+
+    // Build practice recommendations
+    const practiceRecommendations = this._buildPracticeRecommendations(assessment, defects, competencyResults, session);
+
+    // Build overall summary
+    const summary = this._buildSummary(assessment, defects, session, gradeFeedback, processLabel, jointLabel, positionLabel);
+
+    return {
+      aiFeedbackSummary: summary,
+      strengths,
+      weaknesses,
+      improvements,
+      practiceRecommendations,
+    };
+  }
+
+  // ---- Private builders ----
+
+  _buildStrengths(assessment) {
+    const strengths = [];
+
+    // Add overall grade praise
+    if (assessment.grade === 'distinction') {
+      strengths.push('Exceptional overall performance across all scoring criteria.');
+    } else if (assessment.grade === 'credit') {
+      strengths.push('Good overall performance with consistent technique.');
+    }
+
+    // Highlight strong sub-scores
+    const subScores = this._getSubScores(assessment);
+    const sorted = [...subScores].sort((a, b) => b.score - a.score);
+
+    for (const item of sorted) {
+      if (item.score >= 80) {
+        strengths.push(`${this.scoreLabels[item.key]} was excellent (${item.score}/100). This demonstrates strong ${this._getSkillDescription(item.key)}.`);
+      } else if (item.score >= 65) {
+        strengths.push(`${this.scoreLabels[item.key]} was good (${item.score}/100), showing solid ${this._getSkillDescription(item.key)}.`);
+      }
+    }
+
+    // Add note about consistency if overall is good
+    if (assessment.consistencyScore >= 75 && subScores.every((s) => s.score >= 50)) {
+      strengths.push('Good parameter consistency throughout the session — this is crucial for reproducible weld quality.');
+    }
+
+    if (strengths.length === 0) {
+      strengths.push('You completed the weld joint — that takes effort and practice. Every attempt builds muscle memory.');
+    }
+
+    return strengths;
+  }
+
+  _buildWeaknesses(assessment, defects) {
+    const weaknesses = [];
+
+    // Highlight low sub-scores
+    const subScores = this._getSubScores(assessment);
+    for (const item of subScores) {
+      if (item.score < 40) {
+        weaknesses.push(`${this.scoreLabels[item.key]} needs significant improvement (${item.score}/100). ${this._getWeaknessDetail(item.key, item.score)}`);
+      } else if (item.score < 50) {
+        weaknesses.push(`${this.scoreLabels[item.key]} is below the passing threshold (${item.score}/100). ${this._getWeaknessDetail(item.key, item.score)}`);
+      }
+    }
+
+    // Add defect-related weaknesses
+    if (defects && defects.length > 0) {
+      const highDefects = defects.filter((d) => d.probability > 0.3);
+      const medDefects = defects.filter((d) => d.probability > 0.15 && d.probability <= 0.3);
+
+      if (highDefects.length > 0) {
+        const names = highDefects.map((d) => d.defectType.replace(/_/g, ' ')).join(', ');
+        weaknesses.push(`High probability of ${names} detected in your weld. These defects compromise weld integrity and must be addressed.`);
+      }
+
+      if (medDefects.length > 0) {
+        const names = medDefects.map((d) => d.defectType.replace(/_/g, ' ')).join(', ');
+        weaknesses.push(`Moderate risk of ${names}. These may not always be visible but can affect weld performance under load.`);
+      }
+    }
+
+    if (weaknesses.length === 0) {
+      weaknesses.push('No critical weaknesses identified, but there is always room for improvement in welding technique.');
+    }
+
+    return weaknesses;
+  }
+
+  _buildImprovements(assessment, defects, session) {
+    const improvements = [];
+
+    // Score-based improvements
+    if (assessment.speedAccuracyScore < 60) {
+      improvements.push({
+        area: 'Travel Speed',
+        suggestion: 'Practice maintaining a consistent travel speed by counting rhythmically (e.g., 1-2-3 pace). Use the speed gauge to calibrate your natural pace.',
+        priority: 'high',
+      });
+    }
+
+    if (assessment.beadQualityScore < 60) {
+      improvements.push({
+        area: 'Bead Appearance',
+        suggestion: 'Focus on steady arc length and consistent electrode manipulation. Practice stringer beads before attempting weave patterns.',
+        priority: 'high',
+      });
+    }
+
+    if (assessment.fusionQualityScore < 60) {
+      improvements.push({
+        area: 'Fusion Quality',
+        suggestion: 'Ensure adequate heat input by verifying your voltage and amperage settings match the material thickness. Pause briefly at the sidewalls to ensure fusion.',
+        priority: 'high',
+      });
+    }
+
+    if (assessment.penetrationScore < 60) {
+      improvements.push({
+        area: 'Penetration Control',
+        suggestion: 'Adjust current upward if penetration is insufficient, or reduce travel speed. For the root pass, maintain a tight arc and watch the keyhole for proper penetration.',
+        priority: 'high',
+      });
+    }
+
+    if (assessment.alignmentScore < 60) {
+      improvements.push({
+        area: 'Joint Alignment',
+        suggestion: 'Maintain consistent electrode angle — 5-15° travel angle, and 45° work angle for T-joints. Practice on flat plates before progressing to out-of-position work.',
+        priority: 'medium',
+      });
+    }
+
+    if (assessment.consistencyScore < 60) {
+      improvements.push({
+        area: 'Parameter Consistency',
+        suggestion: 'Work on steadier hand movement. Practice running beads on flat plate with your eyes on the puddle, not the arc. Use your non-dominant hand to steady your welding hand.',
+        priority: 'medium',
+      });
+    }
+
+    if (assessment.processControlScore < 60) {
+      improvements.push({
+        area: 'Process Control',
+        suggestion: 'Review the recommended parameter ranges for your process and material. Before welding, set and verify all parameters. Monitor gauges during welding and make corrections immediately.',
+        priority: 'medium',
+      });
+    }
+
+    // Defect-based improvements
+    if (defects && defects.length > 0) {
+      const topDefects = defects.filter((d) => d.probability > 0.2).slice(0, 3);
+      for (const defect of topDefects) {
+        improvements.push({
+          area: `Defect Prevention: ${defect.defectType.replace(/_/g, ' ')}`,
+          suggestion: defect.recommendation,
+          priority: defect.severity === 'high' ? 'high' : 'medium',
+        });
+      }
+    }
+
+    // Sort by priority
+    const priorityOrder = { high: 0, medium: 1, low: 2 };
+    improvements.sort((a, b) => (priorityOrder[a.priority] || 2) - (priorityOrder[b.priority] || 2));
+
+    return improvements;
+  }
+
+  _buildPracticeRecommendations(assessment, defects, competencyResults, session) {
+    const recommendations = [];
+
+    // Based on grade
+    if (assessment.grade === 'fail' || assessment.grade === 'pass') {
+      recommendations.push({
+        exercise: 'Flat Position Stringer Beads',
+        description: 'Run straight stringer beads on flat plate (1G) to build fundamental arc control and travel speed consistency. Repeat until beads are uniform in width and height.',
+        targetScore: 65,
+        estimatedSessions: 5,
+      });
+    }
+
+    if (assessment.penetrationScore < 55) {
+      recommendations.push({
+        exercise: 'Root Pass Practice',
+        description: 'Practice open-root welds on 6mm plate with a 2mm root gap. Focus on maintaining a consistent keyhole and travel speed. Goal: visible root reinforcement on the back side.',
+        targetScore: 60,
+        estimatedSessions: 8,
+      });
+    }
+
+    if (assessment.consistencyScore < 60) {
+      recommendations.push({
+        exercise: 'Parameter Stability Drill',
+        description: 'Set up a flat plate and run 150mm beads while monitoring the real-time parameter displays. Try to keep speed and voltage within ±10% of target. Use the simulator metrics to track improvement.',
+        targetScore: 70,
+        estimatedSessions: 4,
+      });
+    }
+
+    if (assessment.alignmentScore < 60) {
+      recommendations.push({
+        exercise: 'T-Joint Fillet Welds',
+        description: 'Practice fillet welds on T-joints in the flat position (1F). Focus on maintaining 45° work angle and consistent electrode angle. Check bead profile after each pass.',
+        targetScore: 65,
+        estimatedSessions: 6,
+      });
+    }
+
+    // Position progression
+    if (['1G', '1F'].includes(session.position_code) && assessment.overallScore >= 60) {
+      recommendations.push({
+        exercise: 'Progress to Horizontal Position',
+        description: 'You are ready to attempt 2G/2F position welds. The horizontal position requires more attention to gravity effects on the weld pool. Start with stringer beads and progress to weave patterns.',
+        targetScore: 55,
+        estimatedSessions: 10,
+      });
+    } else if (['2G', '2F'].includes(session.position_code) && assessment.overallScore >= 70) {
+      recommendations.push({
+        exercise: 'Progress to Vertical Position',
+        description: 'Your horizontal welds are solid. Try vertical up (3G/3F) — use a zigzag or triangular weave and pause at the toes. Lower current slightly compared to flat position.',
+        targetScore: 55,
+        estimatedSessions: 12,
+      });
+    }
+
+    // Competency-based recommendations
+    if (competencyResults) {
+      const notYetCompetent = competencyResults.filter((c) => c.level === 'not_yet_competent');
+      for (const comp of notYetCompetent.slice(0, 2)) {
+        recommendations.push({
+          exercise: `Focus: ${comp.name || comp.code}`,
+          description: `This competency area needs development. Review the related theory and practice the specific techniques until you achieve consistent results.`,
+          targetScore: 50,
+          estimatedSessions: 6,
+        });
+      }
+    }
+
+    if (recommendations.length === 0) {
+      recommendations.push({
+        exercise: 'Advanced Joint Configurations',
+        description: 'Your fundamentals are solid. Challenge yourself with more complex joint types (e.g., multi-pass V-groove, pipe welds) and out-of-position work.',
+        targetScore: 80,
+        estimatedSessions: 10,
+      });
+    }
+
+    return recommendations;
+  }
+
+  _buildSummary(assessment, defects, session, gradeFeedback, process, joint, position) {
+    const parts = [];
+
+    parts.push(`${gradeFeedback.title}. ${gradeFeedback.template}`);
+    parts.push(`Session: ${process} welding on ${joint} in ${position} position. Overall score: ${assessment.overallScore}/100 (${assessment.grade}).`);
+
+    if (defects && defects.length > 0) {
+      const highRisk = defects.filter((d) => d.severity === 'high');
+      if (highRisk.length > 0) {
+        parts.push(`⚠ High-risk defects detected: ${highRisk.map((d) => d.defectType.replace(/_/g, ' ')).join(', ')}. These require immediate attention before progressing.`);
+      }
+      const totalDefects = defects.length;
+      if (totalDefects > 3) {
+        parts.push(`${totalDefects} potential defect types identified — this suggests multiple parameter issues. Focus on the highest-priority improvements first.`);
+      }
+    } else {
+      parts.push('No significant defect risks detected — your parameter control is within acceptable ranges.');
+    }
+
+    const subScores = this._getSubScores(assessment);
+    const best = subScores.sort((a, b) => b.score - a.score)[0];
+    const worst = subScores.sort((a, b) => a.score - b.score)[0];
+
+    parts.push(`Strongest area: ${this.scoreLabels[best.key]} (${best.score}). Weakest area: ${this.scoreLabels[worst.key]} (${worst.score}).`);
+
+    return parts.join(' ');
+  }
+
+  _getSubScores(assessment) {
+    return [
+      { key: 'speedAccuracy', score: assessment.speedAccuracyScore || 0 },
+      { key: 'beadQuality', score: assessment.beadQualityScore || 0 },
+      { key: 'fusionQuality', score: assessment.fusionQualityScore || 0 },
+      { key: 'penetration', score: assessment.penetrationScore || 0 },
+      { key: 'alignment', score: assessment.alignmentScore || 0 },
+      { key: 'consistency', score: assessment.consistencyScore || 0 },
+      { key: 'processControl', score: assessment.processControlScore || 0 },
+    ];
+  }
+
+  _getSkillDescription(key) {
+    const descs = {
+      speedAccuracy: 'control of travel speed within the recommended range',
+      beadQuality: 'arc stability and bead formation technique',
+      fusionQuality: 'heat input management for adequate fusion',
+      penetration: 'depth of weld penetration control',
+      alignment: 'electrode positioning and joint tracking',
+      consistency: 'parameter steadiness throughout the weld',
+      processControl: 'overall welding parameter management',
+    };
+    return descs[key] || 'welding technique';
+  }
+
+  _getWeaknessDetail(key, score) {
+    const details = {
+      speedAccuracy: score < 35 ? 'Travel speed was far outside the recommended range, leading to poor bead formation.' : 'Travel speed drifted outside the optimal range, affecting bead quality.',
+      beadQuality: score < 35 ? 'Severe arc instability caused irregular bead appearance.' : 'Arc length or current fluctuations affected bead uniformity.',
+      fusionQuality: score < 35 ? 'Insufficient heat input likely caused lack of fusion at the joint interfaces.' : 'Heat input was borderline, risking incomplete fusion in some areas.',
+      penetration: score < 35 ? 'Penetration was critically inadequate — the weld may not have reached the root.' : 'Penetration was shallow, which could compromise joint strength.',
+      alignment: score < 35 ? 'Electrode angle was significantly off, causing misaligned bead placement.' : 'Electrode angle was inconsistent, leading to bead wandering.',
+      consistency: score < 35 ? 'Parameters varied widely throughout the session, indicating unstable technique.' : 'Parameter variation was above acceptable limits, affecting weld uniformity.',
+      processControl: score < 35 ? 'Multiple parameters were outside recommended ranges, suggesting fundamental control issues.' : 'Some parameters exceeded recommended limits, affecting overall weld quality.',
+    };
+    return details[key] || 'This area needs improvement.';
+  }
+}
+
+module.exports = { FeedbackGenerator };

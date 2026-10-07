@@ -1,0 +1,268 @@
+import React, { useRef, useEffect, useState, useCallback } from 'react';
+import useTelemetry from '../../hooks/useTelemetry';
+import { generateJointLine, getBeadVisuals, generateSparks, calculateDeviation } from '../../utils/weldingPhysics';
+
+export default function WeldingCanvas({
+  isActive,
+  parameters,
+  jointType,
+  onTelemetry,
+  onPositionChange,
+}) {
+  const canvasRef = useRef(null);
+  const animFrameRef = useRef(null);
+  const jointLineRef = useRef([]);
+  const beadPathRef = useRef([]);
+  const sparksRef = useRef([]);
+  const [canvasSize, setCanvasSize] = useState({ width: 900, height: 500 });
+
+  const {
+    position,
+    speed,
+    deviation,
+    isTracking,
+    handlers,
+  } = useTelemetry(canvasRef, { jointLine: jointLineRef.current });
+
+  // Initialize joint line
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    setCanvasSize({ width: rect.width, height: rect.height });
+    jointLineRef.current = generateJointLine(jointType || 'butt', rect.width, rect.height);
+    beadPathRef.current = [];
+    sparksRef.current = [];
+  }, [jointType]);
+
+  // Notify parent of position/speed changes
+  useEffect(() => {
+    if (onPositionChange) {
+      onPositionChange({ x: position.x, y: position.y, speed, deviation, isTracking });
+    }
+    if (onTelemetry && isTracking) {
+      const dev = calculateDeviation(position, jointLineRef.current);
+      onTelemetry({
+        x: position.x,
+        y: position.y,
+        speed,
+        deviation: dev,
+        timestamp: Date.now(),
+      });
+    }
+  }, [position, speed, deviation, isTracking]);
+
+  // Spark generation when welding active
+  useEffect(() => {
+    if (!isActive || !isTracking) return;
+    const interval = setInterval(() => {
+      const newSparks = generateSparks(position, parameters);
+      sparksRef.current = [...sparksRef.current.slice(-30), ...newSparks];
+    }, 50);
+    return () => clearInterval(interval);
+  }, [isActive, isTracking, position, parameters]);
+
+  // Draw loop
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const { width, height } = canvasSize;
+
+    // Clear
+    ctx.clearRect(0, 0, width, height);
+
+    // Background - metal plate
+    ctx.fillStyle = '#3a3a4a';
+    ctx.fillRect(0, 0, width, height);
+
+    // Plate texture lines
+    ctx.strokeStyle = '#454560';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i < width; i += 20) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, height);
+      ctx.stroke();
+    }
+    for (let i = 0; i < height; i += 20) {
+      ctx.beginPath();
+      ctx.moveTo(0, i);
+      ctx.lineTo(width, i);
+      ctx.stroke();
+    }
+
+    // Draw joint line
+    const joint = jointLineRef.current;
+    if (joint.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(joint[0].x, joint[0].y);
+      for (let i = 1; i < joint.length; i++) {
+        ctx.lineTo(joint[i].x, joint[i].y);
+      }
+      ctx.strokeStyle = '#1a1a2e';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+
+      // Joint edge highlights
+      ctx.strokeStyle = '#555570';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Draw deposited bead
+    if (isActive && isTracking && beadPathRef.current) {
+      const lastPoint = beadPathRef.current[beadPathRef.current.length - 1];
+      if (!lastPoint ||
+          Math.hypot(position.x - lastPoint.x, position.y - lastPoint.y) > 2) {
+        beadPathRef.current.push({
+          x: position.x,
+          y: position.y,
+          speed,
+          voltage: parameters.voltage,
+          current: parameters.current,
+          wireSpeed: parameters.wireSpeed,
+        });
+      }
+
+      const beadVisuals = getBeadVisuals(parameters, speed);
+
+      for (let i = 1; i < beadPathRef.current.length; i++) {
+        const prev = beadPathRef.current[i - 1];
+        const curr = beadPathRef.current[i];
+        const currVisuals = getBeadVisuals(
+          { voltage: curr.voltage, current: curr.current, wireSpeed: curr.wireSpeed },
+          curr.speed
+        );
+
+        // Bead body
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y);
+        ctx.lineTo(curr.x, curr.y);
+        ctx.strokeStyle = currVisuals.color;
+        ctx.lineWidth = currVisuals.width;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.stroke();
+
+        // Bead highlight (top reflection)
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y - currVisuals.width * 0.2);
+        ctx.lineTo(curr.x, curr.y - currVisuals.width * 0.2);
+        ctx.strokeStyle = currVisuals.highlight;
+        ctx.lineWidth = currVisuals.width * 0.3;
+        ctx.stroke();
+
+        // Bead shadow (bottom)
+        ctx.beginPath();
+        ctx.moveTo(prev.x, prev.y + currVisuals.width * 0.15);
+        ctx.lineTo(curr.x, curr.y + currVisuals.width * 0.15);
+        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+        ctx.lineWidth = currVisuals.width * 0.2;
+        ctx.stroke();
+      }
+    }
+
+    // Draw sparks
+    const now = Date.now();
+    sparksRef.current = sparksRef.current.filter(s => now - s.born < s.life);
+    sparksRef.current.forEach(spark => {
+      const age = (now - spark.born) / spark.life;
+      const alpha = 1 - age;
+      const size = spark.size * (1 - age * 0.5);
+      ctx.beginPath();
+      ctx.arc(
+        spark.x + spark.vx * age * spark.life * 0.05,
+        spark.y + spark.vy * age * spark.life * 0.05 + age * age * 50,
+        size,
+        0,
+        Math.PI * 2
+      );
+      ctx.fillStyle = `rgba(${spark.r},${spark.g},${spark.b},${alpha})`;
+      ctx.fill();
+    });
+
+    // Draw torch indicator
+    if (isTracking) {
+      // Torch glow
+      const gradient = ctx.createRadialGradient(
+        position.x, position.y, 0,
+        position.x, position.y, isActive ? 35 : 15
+      );
+      if (isActive) {
+        gradient.addColorStop(0, 'rgba(255, 200, 50, 0.8)');
+        gradient.addColorStop(0.3, 'rgba(255, 150, 30, 0.4)');
+        gradient.addColorStop(1, 'rgba(255, 100, 0, 0)');
+      } else {
+        gradient.addColorStop(0, 'rgba(100, 150, 255, 0.5)');
+        gradient.addColorStop(1, 'rgba(100, 150, 255, 0)');
+      }
+      ctx.beginPath();
+      ctx.arc(position.x, position.y, isActive ? 35 : 15, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Crosshair
+      ctx.strokeStyle = isActive ? '#ffcc00' : '#6496ff';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(position.x - 12, position.y);
+      ctx.lineTo(position.x + 12, position.y);
+      ctx.moveTo(position.x, position.y - 12);
+      ctx.lineTo(position.x, position.y + 12);
+      ctx.stroke();
+
+      // Nozzle circle
+      ctx.beginPath();
+      ctx.arc(position.x, position.y, 6, 0, Math.PI * 2);
+      ctx.strokeStyle = isActive ? '#ffaa00' : '#4488ff';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // Deviation indicator
+    if (isActive && isTracking && joint.length > 0) {
+      const dev = calculateDeviation(position, joint);
+      const devColor = dev < 5 ? '#10b981' : dev < 15 ? '#f59e0b' : '#ef4444';
+      ctx.fillStyle = devColor;
+      ctx.font = '12px Inter, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(`Dev: ${dev.toFixed(1)}px`, 10, height - 10);
+    }
+
+    // Speed indicator
+    if (isActive && isTracking) {
+      ctx.fillStyle = '#06b6d4';
+      ctx.font = '12px Inter, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(`Speed: ${speed.toFixed(0)} px/s`, width - 10, height - 10);
+    }
+
+    animFrameRef.current = requestAnimationFrame(draw);
+  }, [canvasSize, isActive, isTracking, position, speed, parameters]);
+
+  useEffect(() => {
+    animFrameRef.current = requestAnimationFrame(draw);
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [draw]);
+
+  // Reset bead path
+  const resetCanvas = useCallback(() => {
+    beadPathRef.current = [];
+    sparksRef.current = [];
+  }, []);
+
+  return (
+    <div className="welding-canvas-wrapper">
+      <canvas
+        ref={canvasRef}
+        className="welding-canvas"
+        width={canvasSize.width}
+        height={canvasSize.height}
+        {...handlers}
+      />
+    </div>
+  );
+}

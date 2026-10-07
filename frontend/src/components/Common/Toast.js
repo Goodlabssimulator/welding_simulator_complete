@@ -1,0 +1,19 @@
+import React from 'react';
+
+export default function Toast({ toasts }) {
+  if (!toasts || toasts.length === 0) return null;
+
+  return (
+    <div className="toast-container">
+      {toasts.map(toast => (
+        <div key={toast.id} className={`toast toast-${toast.type}`}>
+          {toast.type === 'success' && '✓ '}
+          {toast.type === 'warning' && '⚠ '}
+          {toast.type === 'danger' && '✕ '}
+          {toast.type === 'info' && 'ℹ '}
+          {toast.message}
+        </div>
+      ))}
+    </div>
+  );
+}
