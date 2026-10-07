@@ -4,11 +4,27 @@ import path from 'node:path';
 
 export default defineConfig({
   plugins: [react()],
+
+  // Allow JSX syntax inside .js files (CRA convention carried over)
+  esbuild: {
+    loader: 'jsx',
+    include: /src\/.*\.jsx?$/,
+    exclude: [],
+  },
+
+  // Same for dependency pre-bundling
+  optimizeDeps: {
+    esbuildOptions: {
+      loader: { '.js': 'jsx' },
+    },
+  },
+
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
   },
+
   server: {
     port: 3000,
     open: false,
@@ -23,9 +39,11 @@ export default defineConfig({
       },
     },
   },
+
   preview: {
     port: 3000,
   },
+
   build: {
     outDir: 'dist',
     sourcemap: false,
@@ -38,6 +56,7 @@ export default defineConfig({
       },
     },
   },
+
   test: {
     globals: true,
     environment: 'jsdom',

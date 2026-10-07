@@ -3,8 +3,8 @@
  */
 
 // API Base URL
-export const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
-export const WS_BASE = process.env.REACT_APP_WS_URL || 'ws://localhost:5000/ws';
+export const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+export const WS_BASE = import.meta.env.VITE_WS_URL || 'ws://localhost:5000/ws';
 
 // Welding Types
 export const WELD_TYPES = {
