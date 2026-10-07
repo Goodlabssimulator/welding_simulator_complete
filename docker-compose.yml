@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: weldsim-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: welding_simulator
+      POSTGRES_USER: welding_admin
+      POSTGRES_PASSWORD: WeldingLocal2025!
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - weldsim-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U welding_admin -d welding_simulator"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  weldsim-pgdata:
+    name: weldsim-pgdata
