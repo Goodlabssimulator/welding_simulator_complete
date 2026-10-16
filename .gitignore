@@ -65,3 +65,5 @@ project_dump.txt
 *.bak
 *.bak[0-9]
 *.bak[0-9][0-9]
+
+neondb_code
