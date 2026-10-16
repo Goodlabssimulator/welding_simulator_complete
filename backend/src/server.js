@@ -36,8 +36,19 @@ const server = http.createServer(app);
 // =============================================================
 
 app.use(helmet());
+// Support comma-separated CORS origins (e.g. production + preview URLs)
+const allowedOrigins = (config.CORS_ORIGIN || '')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: config.CORS_ORIGIN,
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g., curl, Postman, mobile apps)
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS not allowed for origin: ${origin}`));
+  },
   credentials: true,
 }));
 app.use(cookieParser());
