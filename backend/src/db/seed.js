@@ -48,11 +48,16 @@ const USERS = [
 
 async function main() {
   const pool = new Pool({
+    // Prefer DATABASE_URL (Neon, Render, etc.); fall back to local DB_* vars
+    connectionString: process.env.DATABASE_URL || undefined,
     host: config.DB_HOST,
     port: config.DB_PORT,
     database: config.DB_NAME,
     user: config.DB_USER,
     password: config.DB_PASSWORD,
+    ssl: process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false,
   });
 
   const client = await pool.connect();
