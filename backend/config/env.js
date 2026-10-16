@@ -1,34 +1,47 @@
 /**
  * Environment configuration loader.
- * Loads `.env` from the backend root regardless of CWD.
+ *
+ * Supports two modes:
+ *   1. DATABASE_URL — single connection string (Neon, Render, Railway, etc.)
+ *   2. Individual DB_* vars — for local dev
  */
 
 const path = require('path');
 const dotenv = require('dotenv');
 
-// Always resolve .env relative to this file's location (backend/)
+// Load .env from backend root, regardless of CWD
 dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 
-function required(key, fallback) {
-  const value = process.env[key] ?? fallback;
-  if (value === undefined) {
+function required(key) {
+  const value = process.env[key];
+  if (value === undefined || value === '') {
     throw new Error(`Missing required environment variable: ${key}`);
   }
   return value;
 }
 
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const IS_PRODUCTION = NODE_ENV === 'production';
+const HAS_DATABASE_URL = !!process.env.DATABASE_URL;
+
 module.exports = {
   // Server
   PORT: Number(process.env.PORT) || 5000,
-  NODE_ENV: process.env.NODE_ENV || 'development',
-  IS_PRODUCTION: process.env.NODE_ENV === 'production',
+  NODE_ENV,
+  IS_PRODUCTION,
 
   // Database
-  DB_HOST: process.env.DB_HOST || 'localhost',
+  // If DATABASE_URL is set, individual DB_* vars become optional.
+  // Otherwise, DB_PASSWORD (and others) are required.
+  DATABASE_URL: process.env.DATABASE_URL || null,
+
+  DB_HOST: process.env.DB_HOST || (HAS_DATABASE_URL ? '' : 'localhost'),
   DB_PORT: Number(process.env.DB_PORT) || 5432,
-  DB_NAME: process.env.DB_NAME || 'welding_simulator',
-  DB_USER: process.env.DB_USER || 'welding_admin',
-  DB_PASSWORD: required('DB_PASSWORD'),
+  DB_NAME: process.env.DB_NAME || (HAS_DATABASE_URL ? '' : 'welding_simulator'),
+  DB_USER: process.env.DB_USER || (HAS_DATABASE_URL ? '' : 'welding_admin'),
+  DB_PASSWORD: HAS_DATABASE_URL
+    ? (process.env.DB_PASSWORD || '')
+    : required('DB_PASSWORD'),
 
   // JWT
   JWT_SECRET: required('JWT_SECRET'),
