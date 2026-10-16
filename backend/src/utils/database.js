@@ -9,14 +9,21 @@ const { Pool } = require('pg');
 const config = require('../../config/env');
 
 const pool = new Pool({
+  // Prefer a full connection string (Neon, Render, Railway, etc.)
+  connectionString: process.env.DATABASE_URL || undefined,
+  // Fall back to individual env vars (local dev)
   host: config.DB_HOST,
   port: config.DB_PORT,
   database: config.DB_NAME,
   user: config.DB_USER,
   password: config.DB_PASSWORD,
-  max: 20,                  // Maximum pool connections
-  idleTimeoutMillis: 30000, // Close idle connections after 30s
-  connectionTimeoutMillis: 2000,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 10000,
+  // SSL is required for Neon/Render/cloud Postgres in production
+  ssl: process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 // Handle pool-level errors
