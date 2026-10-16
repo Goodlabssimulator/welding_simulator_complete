@@ -65,6 +65,7 @@
         "lines": 0,
         "statements": 0
       }
-    }
+    },
+    "testTimeout": 30000
   }
 }

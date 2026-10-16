@@ -130,12 +130,17 @@ class FeedbackGenerator {
       const medDefects = defects.filter((d) => d.probability > 0.15 && d.probability <= 0.3);
 
       if (highDefects.length > 0) {
-        const names = highDefects.map((d) => d.defectType.replace(/_/g, ' ')).join(', ');
+        // [defensive-defect-names]
+        const names = highDefects
+          .map((d) => (d.defectType || d.type || 'unknown').replace(/_/g, ' '))
+          .join(', ');
         weaknesses.push(`High probability of ${names} detected in your weld. These defects compromise weld integrity and must be addressed.`);
       }
 
       if (medDefects.length > 0) {
-        const names = medDefects.map((d) => d.defectType.replace(/_/g, ' ')).join(', ');
+        const names = medDefects
+          .map((d) => (d.defectType || d.type || 'unknown').replace(/_/g, ' '))
+          .join(', ');
         weaknesses.push(`Moderate risk of ${names}. These may not always be visible but can affect weld performance under load.`);
       }
     }
@@ -212,7 +217,7 @@ class FeedbackGenerator {
       const topDefects = defects.filter((d) => d.probability > 0.2).slice(0, 3);
       for (const defect of topDefects) {
         improvements.push({
-          area: `Defect Prevention: ${defect.defectType.replace(/_/g, ' ')}`,
+          area: `Defect Prevention: ${(defect.defectType || defect.type || 'unknown').replace(/_/g, ' ')}`,
           suggestion: defect.recommendation,
           priority: defect.severity === 'high' ? 'high' : 'medium',
         });
@@ -317,7 +322,7 @@ class FeedbackGenerator {
     if (defects && defects.length > 0) {
       const highRisk = defects.filter((d) => d.severity === 'high');
       if (highRisk.length > 0) {
-        parts.push(`⚠ High-risk defects detected: ${highRisk.map((d) => d.defectType.replace(/_/g, ' ')).join(', ')}. These require immediate attention before progressing.`);
+        parts.push(`⚠ High-risk defects detected: ${highRisk.map((d) => (d.defectType || d.type || 'unknown').replace(/_/g, ' ')).join(', ')}. These require immediate attention before progressing.`);
       }
       const totalDefects = defects.length;
       if (totalDefects > 3) {

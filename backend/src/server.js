@@ -192,20 +192,24 @@ async function handleTelemetry(userId, telemetry) {
 
 const PORT = config.PORT;
 
-server.listen(PORT, () => {
-  console.log(`\n🔥 Welding Simulator API running on port ${PORT}`);
-  console.log(`📡 WebSocket server ready at ws://localhost:${PORT}/ws`);
-  console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
-  console.log(`🌍 Environment: ${config.NODE_ENV}\n`);
-});
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully...');
-  server.close(() => {
-    pool.end();
-    process.exit(0);
+// [test-safe] Only listen when this file is run directly (node src/server.js).
+// When required by tests (or imported), the caller controls the listen lifecycle.
+if (require.main === module) {
+  server.listen(PORT, () => {
+    console.log(`\n🔥 Welding Simulator API running on port ${PORT}`);
+    console.log(`📡 WebSocket server ready at ws://localhost:${PORT}/ws`);
+    console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
+    console.log(`🌍 Environment: ${config.NODE_ENV}\n`);
   });
-});
+
+  // Graceful shutdown — only when running as the entry point
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received, shutting down gracefully...');
+    server.close(() => {
+      pool.end();
+      process.exit(0);
+    });
+  });
+}
 
 module.exports = { app, server };

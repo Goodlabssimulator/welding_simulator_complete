@@ -148,23 +148,45 @@ export default function WeldingCanvas({
     // BEAD: accumulate only while welding; draw always
     // =====================================================
 
-    // 1) Accumulate new bead points when the user is actively welding
+    // [smooth-bead] Accumulate new bead points when actively welding.
+    // Interpolate between the last point and the current position so we
+    // get a continuous trail even with fast mouse movement.
     if (isActive && isTracking) {
       const path = beadPathRef.current;
       const last = path[path.length - 1];
-      const dist = last
-        ? Math.hypot(safePosition.x - last.x, safePosition.y - last.y)
-        : Infinity;
+      const cur = { x: safePosition.x, y: safePosition.y };
+      const params = {
+        speed: safeSpeed,
+        voltage: parameters.voltage ?? 24,
+        current: parameters.current ?? 120,
+        wireSpeed: parameters.wireFeedSpeed ?? 6,
+      };
 
-      if (dist > 1.5) {
-        path.push({
-          x: safePosition.x,
-          y: safePosition.y,
-          speed: safeSpeed,
-          voltage: parameters.voltage ?? 24,
-          current: parameters.current ?? 120,
-          wireSpeed: parameters.wireFeedSpeed ?? 6,
-        });
+      if (!last) {
+        path.push({ ...cur, ...params });
+      } else {
+        const dx = cur.x - last.x;
+        const dy = cur.y - last.y;
+        const dist = Math.hypot(dx, dy);
+
+        if (dist > 0.5) {
+          // Insert intermediate points if the jump is large (> 3px)
+          const step = 3;
+          const steps = dist > step ? Math.ceil(dist / step) : 1;
+          for (let s = 1; s <= steps; s++) {
+            const t = s / steps;
+            path.push({
+              x: last.x + dx * t,
+              y: last.y + dy * t,
+              ...params,
+            });
+          }
+        }
+      }
+
+      // Cap memory — don't let it grow unbounded
+      if (path.length > 2000) {
+        path.splice(0, path.length - 2000);
       }
     }
 
