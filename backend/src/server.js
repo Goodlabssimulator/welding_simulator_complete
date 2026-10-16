@@ -25,6 +25,10 @@ const { errorHandler } = require('./middleware/errorHandler');
 const { pool } = require('./utils/database');
 
 const app = express();
+
+// Trust the first proxy (Render, Cloudflare, etc.) — required for rate limiting
+// and correct client IP detection behind reverse proxies.
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 // =============================================================
