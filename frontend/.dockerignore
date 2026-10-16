@@ -1,0 +1,13 @@
+node_modules
+dist
+build
+.env
+.env.*
+!.env.example
+*.bak
+*.bak[0-9]
+src/__tests__
+__tests__
+coverage
+.git
+.gitignore

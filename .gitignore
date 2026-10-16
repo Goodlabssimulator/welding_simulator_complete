@@ -56,3 +56,12 @@ pids/
 .temp/
 tmp/
 project_dump.txt
+
+# Docker env
+.env.docker
+!.env.docker.example
+
+# Backup files
+*.bak
+*.bak[0-9]
+*.bak[0-9][0-9]
